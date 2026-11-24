@@ -309,6 +309,7 @@ final class SyncProgressBridge: SyncProgressListener, @unchecked Sendable {
 /// Orchestrates a sync and exposes progress to the UI.
 @MainActor
 final class RingSync: ObservableObject {
+    @Published var liveLatestEstimate: UInt16?
     @Published var liveDiagnostics: [String] = []
     @Published var liveSamples: [Double] = []
     @Published var liveActive = false
@@ -411,6 +412,7 @@ final class RingSync: ObservableObject {
         liveStopping = false
         liveSamples = []
         liveDiagnostics = []
+        liveLatestEstimate = nil
         liveStatus = "Buscando tu anillo…"
         WorkCoordinator.shared.invalidateAnalysis()
         await WorkGate.shared.acquire()
@@ -448,6 +450,9 @@ final class RingSync: ObservableObject {
                 guard let self, self.liveActive, !self.liveStopping else { return }
                 self.liveSamples.append(Double(bpm))
                 self.liveStatus = "Recibiendo pulsaciones"
+            } latest: { [weak self] bpm in
+                guard let self, self.liveActive, !self.liveStopping else { return }
+                self.liveLatestEstimate = bpm
             } diagnostic: { [weak self] message in
                 guard let self else { return }
                 self.liveDiagnostics.append(message)
@@ -459,7 +464,7 @@ final class RingSync: ObservableObject {
             // mode restoration write to reach the ring before disconnecting.
             try? await Task.sleep(nanoseconds: 800_000_000)
             liveStatus = liveStopping ? "Medición detenida." :
-                (count == 0 ? "Sin señal válida. Lleva el anillo puesto y permanece quieto." : "Medición finalizada.")
+                (count == 0 ? (liveLatestEstimate == nil ? "Sin señal válida. Lleva el anillo puesto y permanece quieto." : "Consulta de lecturas recientes finalizada.") : "Medición finalizada.")
         } catch {
             liveStatus = liveStopping ? "Medición detenida." : "No se pudo medir. Comprueba la conexión Bluetooth."
         }
@@ -958,10 +963,15 @@ final class RingSync: ObservableObject {
 
 final class LivePulseBridge: LivePulseListener, @unchecked Sendable {
     private let update: @MainActor (UInt16) -> Void
+    private let latest: @MainActor (UInt16) -> Void
     private let diagnostic: @MainActor (String) -> Void
-    init(_ update: @escaping @MainActor (UInt16) -> Void, diagnostic: @escaping @MainActor (String) -> Void) {
+    init(_ update: @escaping @MainActor (UInt16) -> Void, latest: @escaping @MainActor (UInt16) -> Void, diagnostic: @escaping @MainActor (String) -> Void) {
         self.update = update
+        self.latest = latest
         self.diagnostic = diagnostic
+    }
+    func onLatest(bpm: UInt16) {
+        Task { @MainActor in self.latest(bpm) }
     }
     func onDiagnostic(message: String) {
         Task { @MainActor in self.diagnostic(message) }
