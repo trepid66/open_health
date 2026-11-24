@@ -299,6 +299,7 @@ pub trait SyncProgressListener: Send + Sync {
 pub trait LivePulseListener: Send + Sync {
     fn on_sample(&self, bpm: u16, ibi_ms: u16);
     fn on_diagnostic(&self, message: String);
+    fn on_latest(&self, bpm: u16);
 }
 
 #[derive(uniffi::Record)]
@@ -607,62 +608,132 @@ impl RingSession {
                 return Err(SyncError::Failed("unexpected ring serial".into()));
             }
         }
+        let previous = client.feature_status(feature::DAYTIME_HR).await
+            .map_err(|e| SyncError::Failed(format!("initial HR status: {e}")))?;
+        let previous_mode = previous.mode;
+        let previous_sub = previous.subscription;
+        listener.on_diagnostic(format!("Modo anterior: {previous_mode}; suscripción: {previous_sub}"));
+        // A latest-value response includes an IBI and a measurement timestamp.
+        // Read the baseline BEFORE starting so cached measurements are not
+        // mistaken for newly captured ones. If missing, the first reply is
+        // used solely as a baseline.
         let mut rx = client.transport().subscribe();
-        let previous = client.feature_status(feature::DAYTIME_HR).await.ok();
-        let previous_mode = previous.as_ref().map(|s| s.mode).unwrap_or(feature_mode::AUTOMATIC);
-        let previous_sub = previous.as_ref().map(|s| s.subscription);
-        listener.on_diagnostic(format!("Modo anterior: {previous_mode}; suscripción: {previous_sub:?}"));
-        // Subscribe explicitly; some firmware does not push feature data merely
-        // because connected-live mode is active. Restore the original settings.
-        let subscribed = if previous_sub.is_some() {
-            client.set_feature_subscription(feature::DAYTIME_HR, protocol::subscription_mode::FEATURE_DATA).await.ok()
-        } else { None };
-        listener.on_diagnostic(format!("Respuesta suscripción: {subscribed:?}"));
+        let mut last_stamp: Option<i32> = None;
+        client.transport().write(&protocol::req_feature_latest(feature::DAYTIME_HR))
+            .await.map_err(|e| SyncError::Failed(e.to_string()))?;
+        let baseline_deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            let incoming = tokio::select! {
+                biased;
+                _ = stop.changed() => return Ok(0),
+                r = tokio::time::timeout_at(baseline_deadline, rx.recv()) => r,
+            };
+            match incoming {
+                Ok(Ok(frame)) => {
+                    for p in protocol::Packet::parse_many(&frame) {
+                        if p.ext_tag() == Some(0x25) && p.payload.get(1) == Some(&feature::DAYTIME_HR)
+                            && p.payload.get(2) == Some(&0) && p.payload.len() >= 16 {
+                            last_stamp = Some(i32::from_le_bytes([p.payload[9],p.payload[10],p.payload[11],p.payload[12]]));
+                            break;
+                        }
+                    }
+                    if last_stamp.is_some() { break; }
+                }
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+                _ => break,
+            }
+        }
+        listener.on_diagnostic(format!("Referencia de lectura anterior: {}", last_stamp.is_some()));
+        if stop.borrow().is_some() { return Ok(0); }
+        // Ring 4 protocol notes: CONNECTED_LIVE first, then LATEST subscription.
+        // Reference: Defying/oura-ring4-ble/docs/apk-findings.md.
         let activation = client.set_feature_mode(feature::DAYTIME_HR, feature_mode::CONNECTED_LIVE).await;
         listener.on_diagnostic(format!("Activación: {}", if activation.is_ok() { "aceptada".into() } else { format!("{:?}", activation.as_ref().err()) }));
+        let subscribed = if activation.is_ok() && stop.borrow().is_none() {
+            client.set_feature_subscription(feature::DAYTIME_HR, protocol::subscription_mode::LATEST).await.ok()
+        } else { None };
+        listener.on_diagnostic(format!("Suscripción LATEST: {subscribed:?}"));
         let mut count = 0u32;
         let mut frames = 0u32;
         let mut indications = 0u32;
         let mut rejected = 0u32;
+        let mut fresh = 0u32;
+        let mut polls = 0u32;
+        let mut latest_replies = 0u32;
         let mut types = std::collections::BTreeSet::new();
+        let mut poll = tokio::time::interval(Duration::from_secs(3));
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let deadline = tokio::time::Instant::now() + Duration::from_secs(u64::from(seconds.clamp(5, 120)));
         if activation.is_ok() {
             loop {
                 if stop.borrow().is_some() { break; }
-                let received = tokio::select! {
+                tokio::select! {
                     biased;
                     _ = stop.changed() => break,
-                    result = tokio::time::timeout_at(deadline, rx.recv()) => result,
-                };
-                match received {
-                    Ok(Ok(frame)) => {
-                        frames += 1;
-                        for p in protocol::Packet::parse_many(&frame) {
-                            types.insert(format!("{:02x}/{:02x}", p.tag, p.ext_tag().unwrap_or(0)));
-                            if p.ext_tag() != Some(0x28) || p.payload.get(1) != Some(&feature::DAYTIME_HR) { continue; }
-                            indications += 1;
-                            if p.payload.len() < 8 { rejected += 1; continue; }
-                            let word = u16::from_le_bytes([p.payload[6], p.payload[7]]);
-                            let ibi = word & 0x0fff;
-                            if word >> 12 == 1 && (300..=2000).contains(&ibi) {
-                                count += 1;
-                                listener.on_sample((60_000u32 / u32::from(ibi)) as u16, ibi);
-                            } else { rejected += 1; }
+                    _ = tokio::time::sleep_until(deadline) => break,
+                    _ = poll.tick() => {
+                        polls += 1;
+                        if client.transport().write(&protocol::req_feature_latest(feature::DAYTIME_HR)).await.is_err() { break; }
+                        if polls % 3 == 1 {
+                            let _ = client.transport().write(&protocol::req_feature_status(feature::DAYTIME_HR)).await;
                         }
-                        if frames <= 5 || frames % 10 == 0 {
-                            listener.on_diagnostic(format!("Mensajes: {frames}; pulso: {indications}; descartados: {rejected}; tipos: {types:?}"));
+                    },
+                    received = rx.recv() => {
+                        match received {
+                            Ok(frame) => {
+                                frames += 1;
+                                for p in protocol::Packet::parse_many(&frame) {
+                                    types.insert(format!("{:02x}/{:02x}", p.tag, p.ext_tag().unwrap_or(0)));
+                                    if p.payload.get(1) != Some(&feature::DAYTIME_HR) { continue; }
+                                    match p.ext_tag() {
+                                        Some(0x28) => {
+                                            indications += 1;
+                                            if p.payload.len() < 8 { rejected += 1; continue; }
+                                            let word = u16::from_le_bytes([p.payload[6], p.payload[7]]);
+                                            let ibi = word & 0x0fff;
+                                            if word >> 12 == 1 && (300..=2000).contains(&ibi) {
+                                                count += 1;
+                                                listener.on_sample((60_000u32 / u32::from(ibi)) as u16, ibi);
+                                            } else { rejected += 1; }
+                                        }
+                                        Some(0x21) if p.payload.len() >= 6 => {
+                                            listener.on_diagnostic(format!("Estado: modo {}; señal {}; fase {}; suscripción {}",p.payload[2],p.payload[3],p.payload[4],p.payload[5]));
+                                        }
+                                        Some(0x25) => {
+                                            latest_replies += 1;
+                                            if p.payload.get(2) != Some(&0) || p.payload.len() < 16 {
+                                                listener.on_diagnostic(format!("Lectura reciente: resultado {:?}; longitud {}", p.payload.get(2),p.payload.len()));
+                                                continue;
+                                            }
+                                            let ibi = u16::from_le_bytes([p.payload[7],p.payload[8]]);
+                                            let stamp = i32::from_le_bytes([p.payload[9],p.payload[10],p.payload[11],p.payload[12]]);
+                                            let advanced = last_stamp.map(|old| stamp > old).unwrap_or(false);
+                                            if last_stamp.map(|old| stamp > old).unwrap_or(true) { last_stamp = Some(stamp); }
+                                            // The quality flag's exact semantics are not yet verified
+                                            // on Ring 4. Expose this as an experimental latest-value
+                                            // estimate, never a validated individual beat.
+                                            if advanced && stamp > 0 && (300..=2000).contains(&ibi) {
+                                                fresh += 1;
+                                                listener.on_latest((60_000u32 / u32::from(ibi)) as u16);
+                                            }
+                                            if latest_replies <= 3 || latest_replies % 5 == 0 || advanced {
+                                                listener.on_diagnostic(format!("Lectura reciente: nueva {advanced}; IBI plausible {}; calidad 0x{:02x}; señal {}; fase {}",(300..=2000).contains(&ibi),p.payload[15],p.payload[3],p.payload[4]));
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                            _ => break,
                         }
                     }
-                    Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
-                    _ => break,
                 }
             }
         }
         let restored = client.set_feature_mode(feature::DAYTIME_HR, previous_mode).await.is_ok();
-        if let Some(sub) = previous_sub {
-            let _ = client.set_feature_subscription(feature::DAYTIME_HR, sub).await;
-        }
-        listener.on_diagnostic(format!("Final: mensajes {frames}; pulso {indications}; descartados {rejected}; válidos {count}; modo restaurado {restored}; tipos {types:?}"));
+        let sub_restored = client.set_feature_subscription(feature::DAYTIME_HR, previous_sub).await.ok() == Some(0);
+        listener.on_diagnostic(format!("Final: mensajes {frames}; latidos {count}; descartados {rejected}; consultas {polls}; respuestas {latest_replies}; nuevas {fresh}; restaurado modo {restored}, suscripción {sub_restored}; tipos {types:?}"));
         if let Err(e) = activation { return Err(SyncError::Failed(e.to_string())); }
         Ok(count)
     }
