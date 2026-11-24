@@ -1020,7 +1020,7 @@ private func hourTicks(_ win: (a: Int, b: Int, span: Int)) -> [Int] {
     while t <= win.b { out.append(t); t += 60 }
     return out
 }
-private func stageName(_ c: Int) -> String { switch c { case 1: return "Deep"; case 2: return "Light"; case 3: return "REM"; case 4: return "Awake"; default: return "No data" } }
+private func stageName(_ c: Int) -> String { switch c { case 1: return "Profundo"; case 2: return "Ligero"; case 3: return "REM"; case 4: return "Despierto"; default: return "No data" } }
 
 private func debtDuration(_ minutes: Double) -> String {
     let m = max(0, Int(minutes.rounded()))
@@ -1043,7 +1043,7 @@ struct SleepDebtCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    ObsTag("sleep debt", icon: "moon.zzz.fill")
+                    ObsTag("deuda de sueño", icon: "moon.zzz.fill")
                     Spacer()
                     Text("past \(debt.window_days) days").font(Obs.mono(10)).foregroundStyle(Obs.ink2)
                     Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Obs.trace)
@@ -1057,7 +1057,7 @@ struct SleepDebtCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("\(debt.valid_days) of 5 nights").font(Obs.mono(14, .medium)).foregroundStyle(Obs.ink2)
-                    Text("Needs 5 nights of sleep in the past 2 weeks.")
+                    Text("Requiere 5 noches de sueño en las últimas dos semanas.")
                         .font(Obs.mono(11)).foregroundStyle(Obs.muted)
                 }
             }
@@ -1092,7 +1092,7 @@ struct SleepScoreCard: View {
                     .font(Obs.mono(38, .medium)).foregroundStyle(tint).monospacedDigit()
                 VStack(alignment: .leading, spacing: 2) {
                     Text("/ 100").font(Obs.mono(12)).foregroundStyle(Obs.ink2)
-                    Text(score.basis ?? "published norms")
+                    Text(score.basis ?? "referencias publicadas")
                         .font(Obs.mono(9)).foregroundStyle(Obs.muted)
                 }
                 Spacer()
@@ -1100,7 +1100,7 @@ struct SleepScoreCard: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(String(format: "%.1f", breathRate))
                             .font(Obs.mono(15, .medium)).foregroundStyle(Obs.ink).monospacedDigit()
-                        Text("br/min").font(Obs.mono(9)).foregroundStyle(Obs.muted)
+                        Text("rpm").font(Obs.mono(9)).foregroundStyle(Obs.muted)
                     }
                 }
             }
@@ -1130,7 +1130,7 @@ struct SleepScoreCard: View {
             }
 
             Button { expanded.toggle() } label: {
-                Text(expanded ? "hide sources" : "show sources")
+                Text(expanded ? "ocultar fuentes" : "ver fuentes")
                     .font(Obs.mono(10)).foregroundStyle(Obs.ink2)
             }
             .buttonStyle(.plain)
@@ -1149,7 +1149,7 @@ struct IllnessCard: View {
         "AverageHrv": "Heart rate variability", "TemperatureDeviation": "Temperature change",
     ]
     private static let units = [
-        "AverageBreath": "br/min", "LowestHeartRate": "bpm", "AverageHrv": "ms", "TemperatureDeviation": "°C",
+        "AverageBreath": "rpm", "LowestHeartRate": "bpm", "AverageHrv": "ms", "TemperatureDeviation": "°C",
     ]
     private static let order = ["AverageBreath", "LowestHeartRate", "AverageHrv", "TemperatureDeviation"]
     private var tint: Color {
@@ -1369,7 +1369,7 @@ struct SleepDebtDetail: View {
                     }.padding(24)
                 }
             }
-            .navigationTitle("sleep debt").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("deuda de sueño").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
         }
     }
@@ -1418,7 +1418,7 @@ struct DayReportView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Back")
+                    .accessibilityLabel("Volver")
                     Text(day).font(Obs.mono(13, .medium)).foregroundStyle(Obs.ink)
                         .lineLimit(1).fixedSize()
                     Spacer(minLength: 6)
@@ -1477,7 +1477,7 @@ struct DayReportView: View {
             refreshMessages[selected.rawValue] = nil
             Task {
                 let error = await analysis.refresh(DayAnalysisRequest(day: day, kind: selected))
-                refreshMessages[selected.rawValue] = error ?? "Analysis updated."
+                refreshMessages[selected.rawValue] = error ?? "Análisis actualizado."
                 refreshing = nil
             }
         } label: {
@@ -1499,7 +1499,7 @@ struct DayReportView: View {
     /// Only shown while a refresh runs or right after one, so the report keeps its space.
     private func refreshNote(_ analysis: DayAnalysisContext) -> String? {
         if let message = refreshMessages[tab.rawValue] { return message }
-        if refreshing == tab { return "Keep the app open while analysis runs." }
+        if refreshing == tab { return "Mantén la aplicación abierta durante el análisis." }
         return nil
     }
 
@@ -1507,8 +1507,8 @@ struct DayReportView: View {
     /// the main thread: a night carries its full signal series.
     private var exportMenu: some View {
         Menu {
-            Button { export(share: false) } label: { Label("Copy JSON", systemImage: "doc.on.doc") }
-            Button { export(share: true) } label: { Label("Share JSON…", systemImage: "square.and.arrow.up") }
+            Button { export(share: false) } label: { Label("Copiar JSON", systemImage: "doc.on.doc") }
+            Button { export(share: true) } label: { Label("Compartir JSON…", systemImage: "square.and.arrow.up") }
         } label: {
             Image(systemName: exportNote == nil ? "square.and.arrow.up" : "checkmark")
                 .font(.system(size: 15, weight: .medium))
@@ -1535,12 +1535,12 @@ struct DayReportView: View {
             }.value
             switch result {
             case .success(let url):
-                if payload.isEmpty { exportNote = "Nothing to export for this day."; refreshMessages[selected.rawValue] = exportNote }
+                if payload.isEmpty { exportNote = "No hay datos para exportar."; refreshMessages[selected.rawValue] = exportNote }
                 else if let url { exportFile = url }
-                else { exportNote = "Copied" }
+                else { exportNote = "Copiado" }
             case .failure(let error):
                 dlog("export", "day \(day) \(selected.rawValue): \(error)")
-                refreshMessages[selected.rawValue] = "Couldn’t build the JSON export."
+                refreshMessages[selected.rawValue] = "No se pudo crear la exportación JSON."
             }
             if exportNote != nil {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -1553,6 +1553,7 @@ struct DayReportView: View {
 struct SleepReport: View {
     let s: Summary
     let day: String
+    var onBedtimeSaved: () -> Void = {}
     @Environment(\.dayAnalysis) private var analysis
     @State private var editingBedtime = false
     @State private var bedtimeDate = Date()
@@ -1574,25 +1575,25 @@ struct SleepReport: View {
 
     var body: some View {
         if let n = s.night(forDay: day) {
-            let metrics = (n.hypnogram.flatMap { st in Sleep.metrics(Sleep.isOuraStaging(n.staging_source) ? st : Sleep.smooth(st, 5), inBedS: n.durationS) })
+            let metrics = n.stagingComplete ? (n.hypnogram.flatMap { st in Sleep.metrics(Sleep.isOuraStaging(n.staging_source) ? st : Sleep.smooth(st, 5), inBedS: n.durationS) }) : nil
             let asleepH = metrics.map { $0.asleepMin / 60 }
 
             // summary strip
             HStack(alignment: .top, spacing: 0) {
-                Readout(value: n.in_bed_h.map { String(format: "%.1f h", $0) } ?? "–", caption: "in bed")
-                Readout(value: asleepH.map { String(format: "%.1f h", $0) } ?? "–", caption: "asleep")
-                Readout(value: n.efficiency.map { "\(Int($0))%" } ?? "–", caption: "efficiency")
+                Readout(value: n.in_bed_h.map { String(format: "%.1f h", $0) } ?? "–", caption: "en cama")
+                Readout(value: asleepH.map { String(format: "%.1f h", $0) } ?? "–", caption: "dormido")
+                Readout(value: n.efficiency.map { "\(Int($0))%" } ?? "–", caption: "eficiencia")
                 Button {
                     bedtimeDate = Self.dateFromHM(n.start)
                     wakeupDate = Self.dateFromHM(n.end)
                     editingBedtime.toggle()
                 } label: {
                     Readout(value: "\(n.start ?? "–")–\(n.end ?? "–")",
-                            caption: n.isBedtimeManual ? "bedtime · edited" : "bedtime · adjust",
+                            caption: n.isBedtimeManual ? "horario editado" : "ajustar horario",
                             accent: editingBedtime ? Obs.chart : Obs.ink)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Adjust bedtime and wake-up time")
+                .accessibilityLabel("Ajustar hora de acostarse y despertar")
             }
 
             if editingBedtime {
@@ -1600,25 +1601,25 @@ struct SleepReport: View {
             }
 
             if let score = n.sleep_score {
-                Rule("sleep score")
+                Rule("puntuación de sueño")
                 SleepScoreCard(score: score, breathRate: n.breath_rate)
             }
 
             if n.hasHypnogram {
                 if !n.stagingComplete && n.hasHypnogram {
-                    Text("Incomplete sleep analysis. Gaps mean no data, not awake time; sleep metrics are withheld.")
+                    Text("Análisis incompleto. Los huecos representan ausencia de datos, no tiempo despierto.")
                         .font(Obs.mono(11)).foregroundStyle(Obs.ink2)
                 }
-                Rule("Sleep stages & signals")
+                Rule("Fases y señales del sueño")
                 stageLegend
                 Polysomnograph(night: n)
 
-                Rule("Sleep stages")
+                Rule("Fases del sueño")
                 StageBar(n: n)
                 HStack(spacing: 16) {
-                    ForEach([("Deep", n.deep_pct), ("Light", n.light_pct), ("REM", n.rem_pct), ("Awake", n.wake_pct)], id: \.0) { name, pct in
+                    ForEach([("Profundo", n.deep_pct), ("Ligero", n.light_pct), ("REM", n.rem_pct), ("Despierto", n.wake_pct)], id: \.0) { name, pct in
                         Text(name).font(Obs.mono(11)).foregroundStyle(Obs.ink2)
-                            + Text(" \(Int(pct ?? 0))%").font(Obs.mono(11, .medium)).foregroundStyle(Obs.ink)
+                            + Text(pct.map { " \(Int($0))%" } ?? " –").font(Obs.mono(11, .medium)).foregroundStyle(Obs.ink)
                     }
                 }
                 if let m = metrics { clinicalGrid(m) }
@@ -1626,23 +1627,23 @@ struct SleepReport: View {
                 let auto = Sleep.autonomic(night: n,
                                            stages: n.analysisStages)
                 if auto.any {
-                    Rule("HR & HRV by stage")
+                    Rule("Pulso y HRV por fase")
                     autonomicGrid(auto)
                 }
 
-                Rule("Sleep summary")
+                Rule("Resumen del sueño")
                 if n.stagingComplete { interpretation(n, metrics) }
             } else {
                 // model-free build: signals only, no hypnogram
                 if hasAnySeries(n) {
-                    Rule("overnight signals")
+                    Rule("señales nocturnas")
                     Polysomnograph(night: n)
                 }
-                Text("Sleep analysis is not available for this night yet.")
+                Text("El análisis de fases aún no está disponible para esta noche.")
                     .font(Obs.mono(12)).foregroundStyle(Obs.ink2).fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            Text("No sleep recorded for this night.").font(Obs.mono(13)).foregroundStyle(Obs.ink2)
+            Text("No hay sueño registrado para esta noche.").font(Obs.mono(13)).foregroundStyle(Obs.ink2)
         }
     }
 
@@ -1651,14 +1652,14 @@ struct SleepReport: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 16) {
                 HStack(spacing: 6) {
-                    Text("BEDTIME").font(Obs.mono(9)).tracking(1.1).foregroundStyle(Obs.ink2)
-                    DatePicker("Bedtime", selection: $bedtimeDate, displayedComponents: .hourAndMinute)
+                    Text("ACOSTARSE").font(Obs.mono(9)).tracking(1.1).foregroundStyle(Obs.ink2)
+                    DatePicker("Acostarse", selection: $bedtimeDate, displayedComponents: .hourAndMinute)
                         .labelsHidden()
                         .disabled(savingBedtime)
                 }
                 HStack(spacing: 6) {
-                    Text("WAKE-UP").font(Obs.mono(9)).tracking(1.1).foregroundStyle(Obs.ink2)
-                    DatePicker("Wake-up", selection: $wakeupDate, displayedComponents: .hourAndMinute)
+                    Text("DESPERTAR").font(Obs.mono(9)).tracking(1.1).foregroundStyle(Obs.ink2)
+                    DatePicker("Despertar", selection: $wakeupDate, displayedComponents: .hourAndMinute)
                         .labelsHidden()
                         .disabled(savingBedtime)
                 }
@@ -1672,11 +1673,12 @@ struct SleepReport: View {
                     Task {
                         try? BedtimeOverrideStore.set(startHM: startHM, endHM: endHM, forNightKey: nightKey, night: n)
                         _ = await analysis?.refresh(DayAnalysisRequest(day: day, kind: .sleep))
+                        onBedtimeSaved()
                         savingBedtime = false
                         editingBedtime = false
                     }
                 } label: {
-                    Text(savingBedtime ? "saving…" : "apply")
+                    Text(savingBedtime ? "guardando…" : "aplicar")
                         .font(Obs.mono(11, .medium))
                         .foregroundStyle(Obs.paper)
                         .padding(.horizontal, 12).padding(.vertical, 5)
@@ -1691,6 +1693,7 @@ struct SleepReport: View {
                         Task {
                             try? BedtimeOverrideStore.clear(forNightKey: nightKey, night: n)
                             _ = await analysis?.refresh(DayAnalysisRequest(day: day, kind: .sleep))
+                        onBedtimeSaved()
                             savingBedtime = false
                             editingBedtime = false
                         }
@@ -1708,7 +1711,7 @@ struct SleepReport: View {
                 Button {
                     editingBedtime = false
                 } label: {
-                    Text("cancel").font(Obs.mono(11)).foregroundStyle(Obs.muted)
+                    Text("cancelar").font(Obs.mono(11)).foregroundStyle(Obs.muted)
                 }
                 .buttonStyle(.plain)
                 .disabled(savingBedtime)
@@ -1721,7 +1724,7 @@ struct SleepReport: View {
 
     private var stageLegend: some View {
         HStack(spacing: 16) {
-            ForEach([(1, "Deep"), (2, "Light"), (3, "REM"), (4, "Awake")], id: \.0) { code, name in
+            ForEach([(1, "Profundo"), (2, "Ligero"), (3, "REM"), (4, "Despierto")], id: \.0) { code, name in
                 HStack(spacing: 5) {
                     RoundedRectangle(cornerRadius: 2).fill(Obs.stage(code)).frame(width: 9, height: 9)
                     Text(name).font(Obs.mono(11)).foregroundStyle(Obs.ink2)
@@ -1742,12 +1745,12 @@ struct SleepReport: View {
     @ViewBuilder private func clinicalGrid(_ m: SleepMetrics) -> some View {
         let mins = { (x: Double?) in x.map { "\(Int($0.rounded())) min" } ?? "–" }
         let cells: [(String, String)] = [
-            ("sleep onset", mins(m.solMin)),
-            ("rem latency", mins(m.remLatencyMin)),
-            ("awake · waso", mins(m.wasoMin)),
-            ("awakenings", "\(m.awakenings)"),
-            ("sleep cycles", "\(m.cycles)"),
-            ("fragmentation", String(format: "%.0f /h", m.fragIndex)),
+            ("latencia de sueño", mins(m.solMin)),
+            ("latencia REM", mins(m.remLatencyMin)),
+            ("despierto tras dormir", mins(m.wasoMin)),
+            ("despertares", "\(m.awakenings)"),
+            ("ciclos de sueño", "\(m.cycles)"),
+            ("fragmentación", String(format: "%.0f /h", m.fragIndex)),
         ]
         let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
         LazyVGrid(columns: cols, alignment: .leading, spacing: 18) {
@@ -1776,7 +1779,7 @@ struct SleepReport: View {
                 summaryRow(icon: f.icon, tint: f.tint, label: f.label, value: f.value, detail: f.detail)
             }
             if let d = s.sleepDebt, d.valid {
-                summaryRow(icon: "bed.double", tint: Obs.debt(d.state), label: "Sleep debt",
+                summaryRow(icon: "bed.double", tint: Obs.debt(d.state), label: "Deuda de sueño",
                            value: debtDuration(d.debt_min),
                            detail: "vs \(debtDuration(d.need_h * 60)) nightly need"
                                + (d.recent_shortfall_min > 0 ? " · last day \(Int(d.recent_shortfall_min)) min short" : ""))
@@ -1839,12 +1842,12 @@ struct ActivityReport: View {
 
         HStack(alignment: .top, spacing: 0) {
             Readout(value: steps.value, caption: steps.unit)
-            Readout(value: st.map { "\(Int($0.active_kcal ?? 0))" } ?? "–", caption: "active kcal")
-            Readout(value: st.map { "\(Int($0.total_kcal ?? 0))" } ?? "–", caption: "total kcal")
-            if let d = st?.distance_m { Readout(value: String(format: "%.1f", d / 1000), caption: "distance · km") }
+            Readout(value: st?.active_kcal.map { "\(Int($0))" } ?? "–", caption: "kcal activas")
+            Readout(value: st?.total_kcal.map { "\(Int($0))" } ?? "–", caption: "kcal totales")
+            if let d = st?.distance_m { Readout(value: String(format: "%.1f", d / 1000), caption: "distancia · km") }
         }
 
-        Rule("movement across the day")
+        Rule("movimiento durante el día")
         MetProfile(timeline: s.wakingActivityTimeline(for: day))
 
         let bucketMin = prof.isEmpty ? 15.0 : 24.0 * 60.0 / Double(prof.count)
@@ -1853,15 +1856,15 @@ struct ActivityReport: View {
         let peak = prof.max() ?? 0
         let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
         LazyVGrid(columns: cols, alignment: .leading, spacing: 18) {
-            Readout(value: "\(Int(activeMin)) min", caption: "active")
-            Readout(value: "\(Int(lightMin)) min", caption: "lightly active")
-            Readout(value: String(format: "%.1f MET", peak), caption: "peak intensity")
+            Readout(value: "\(Int(activeMin)) min", caption: "activo")
+            Readout(value: "\(Int(lightMin)) min", caption: "actividad ligera")
+            Readout(value: String(format: "%.1f MET", peak), caption: "intensidad máxima")
         }
 
         let ws = s.workoutsOn(day)
-        Rule("sessions")
+        Rule("sesiones")
         if ws.isEmpty {
-            Text("No sessions detected this day.").font(Obs.mono(12)).foregroundStyle(Obs.ink2)
+            Text("No se detectaron sesiones este día.").font(Obs.mono(12)).foregroundStyle(Obs.ink2)
         } else {
             VStack(spacing: 14) {
                 ForEach(ws) { w in SessionRow(label: w.label, durationMin: w.durationMin, startHM: w.startHM) }
@@ -1871,9 +1874,9 @@ struct ActivityReport: View {
 }
 
 private func compactSteps(_ steps: Double?) -> (value: String, unit: String) {
-    guard let steps else { return ("–", "steps") }
-    guard steps >= 1_000 else { return ("\(Int(steps.rounded()))", "steps") }
-    return (String(format: "%.1f", steps / 1_000), "k steps")
+    guard let steps else { return ("–", "pasos") }
+    guard steps >= 1_000 else { return ("\(Int(steps.rounded()))", "pasos") }
+    return (String(format: "%.1f", steps / 1_000), "mil pasos")
 }
 
 // MET-above-rest across the human waking day, rather than a calendar-day 00–24
