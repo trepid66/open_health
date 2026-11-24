@@ -298,6 +298,7 @@ pub trait SyncProgressListener: Send + Sync {
 #[uniffi::export(callback_interface)]
 pub trait LivePulseListener: Send + Sync {
     fn on_sample(&self, bpm: u16, ibi_ms: u16);
+    fn on_diagnostic(&self, message: String);
 }
 
 #[derive(uniffi::Record)]
@@ -606,29 +607,63 @@ impl RingSession {
                 return Err(SyncError::Failed("unexpected ring serial".into()));
             }
         }
+        let mut rx = client.transport().subscribe();
+        let previous = client.feature_status(feature::DAYTIME_HR).await.ok();
+        let previous_mode = previous.as_ref().map(|s| s.mode).unwrap_or(feature_mode::AUTOMATIC);
+        let previous_sub = previous.as_ref().map(|s| s.subscription);
+        listener.on_diagnostic(format!("Modo anterior: {previous_mode}; suscripción: {previous_sub:?}"));
+        // Subscribe explicitly; some firmware does not push feature data merely
+        // because connected-live mode is active. Restore the original settings.
+        let subscribed = if previous_sub.is_some() {
+            client.set_feature_subscription(feature::DAYTIME_HR, protocol::subscription_mode::FEATURE_DATA).await.ok()
+        } else { None };
+        listener.on_diagnostic(format!("Respuesta suscripción: {subscribed:?}"));
+        let activation = client.set_feature_mode(feature::DAYTIME_HR, feature_mode::CONNECTED_LIVE).await;
+        listener.on_diagnostic(format!("Activación: {}", if activation.is_ok() { "aceptada".into() } else { format!("{:?}", activation.as_ref().err()) }));
         let mut count = 0u32;
-        let result = tokio::select! {
-            biased;
-            _ = stop.changed() => None,
-            result = client.live_heart_rate(
-                Duration::from_secs(u64::from(seconds.clamp(5, 120))),
-                false,
-                |sample| {
-                    count += 1;
-                    listener.on_sample(sample.bpm, sample.ibi_ms);
-                },
-            ) => Some(result),
-        };
-        // The upstream method restores AUTOMATIC on normal completion, but
-        // dropping its future on cancellation bypasses that tail.
-        if !matches!(&result, Some(Ok(()))) {
-            let _ = client.transport().write(&protocol::req_set_feature_mode(
-                feature::DAYTIME_HR, feature_mode::AUTOMATIC,
-            )).await;
+        let mut frames = 0u32;
+        let mut indications = 0u32;
+        let mut rejected = 0u32;
+        let mut types = std::collections::BTreeSet::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(u64::from(seconds.clamp(5, 120)));
+        if activation.is_ok() {
+            loop {
+                if stop.borrow().is_some() { break; }
+                let received = tokio::select! {
+                    biased;
+                    _ = stop.changed() => break,
+                    result = tokio::time::timeout_at(deadline, rx.recv()) => result,
+                };
+                match received {
+                    Ok(Ok(frame)) => {
+                        frames += 1;
+                        for p in protocol::Packet::parse_many(&frame) {
+                            types.insert(format!("{:02x}/{:02x}", p.tag, p.ext_tag().unwrap_or(0)));
+                            if p.ext_tag() != Some(0x28) || p.payload.get(1) != Some(&feature::DAYTIME_HR) { continue; }
+                            indications += 1;
+                            if p.payload.len() < 8 { rejected += 1; continue; }
+                            let word = u16::from_le_bytes([p.payload[6], p.payload[7]]);
+                            let ibi = word & 0x0fff;
+                            if word >> 12 == 1 && (300..=2000).contains(&ibi) {
+                                count += 1;
+                                listener.on_sample((60_000u32 / u32::from(ibi)) as u16, ibi);
+                            } else { rejected += 1; }
+                        }
+                        if frames <= 5 || frames % 10 == 0 {
+                            listener.on_diagnostic(format!("Mensajes: {frames}; pulso: {indications}; descartados: {rejected}; tipos: {types:?}"));
+                        }
+                    }
+                    Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+                    _ => break,
+                }
+            }
         }
-        if let Some(result) = result {
-            result.map_err(|e| SyncError::Failed(e.to_string()))?;
+        let restored = client.set_feature_mode(feature::DAYTIME_HR, previous_mode).await.is_ok();
+        if let Some(sub) = previous_sub {
+            let _ = client.set_feature_subscription(feature::DAYTIME_HR, sub).await;
         }
+        listener.on_diagnostic(format!("Final: mensajes {frames}; pulso {indications}; descartados {rejected}; válidos {count}; modo restaurado {restored}; tipos {types:?}"));
+        if let Err(e) = activation { return Err(SyncError::Failed(e.to_string())); }
         Ok(count)
     }
 
