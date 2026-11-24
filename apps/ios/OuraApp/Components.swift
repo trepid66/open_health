@@ -205,7 +205,7 @@ struct VitalCell: View {
                 Text(unit).font(Obs.mono(11)).foregroundStyle(Obs.ink2)
             }
             if let d = delta {
-                Text("\(d >= 0 ? "+" : "")\(d, specifier: "%.0f")% vs base")
+                Text("\(d >= 0 ? "+" : "")\(d, specifier: "%.0f")% respecto a referencia")
                     .font(Obs.mono(10))
                     .foregroundStyle(tone)
             }
@@ -298,7 +298,7 @@ struct VitalTrendView: View {
                         // the hour-by-hour range view above the nightly trend.
                         if kind == .heartRate {
                             HourlyHeartRateSection()
-                            ObsTag("nightly resting", icon: "moon.fill")
+                            ObsTag("mínimo nocturno", icon: "moon.fill")
                         }
                         Picker("Period", selection: $period) {
                             ForEach(VitalPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -312,7 +312,7 @@ struct VitalTrendView: View {
                             HStack(spacing: 8) {
                                 Text(last.date).font(Obs.mono(12)).foregroundStyle(Obs.muted)
                                 if let d = deltaPct {
-                                    Text("\(d >= 0 ? "+" : "")\(d, specifier: "%.0f")% vs base")
+                                    Text("\(d >= 0 ? "+" : "")\(d, specifier: "%.0f")% respecto a referencia")
                                         .font(Obs.mono(12)).foregroundStyle(accent)
                                 }
                             }
@@ -331,10 +331,10 @@ struct VitalTrendView: View {
                             }
                             .obsCard()
                         } else if all.isEmpty {
-                            Text("No readings yet.")
+                            Text("Todavía no hay mediciones.")
                                 .font(Obs.mono(12)).foregroundStyle(Obs.ink2)
                         } else {
-                            Text("Not enough nights in this period yet.")
+                            Text("No hay suficientes noches en este periodo.")
                                 .font(Obs.mono(12)).foregroundStyle(Obs.ink2)
                         }
                     }
@@ -446,7 +446,7 @@ private struct VitalTrendChart: View {
             if baseline != nil {
                 HStack(spacing: 5) {
                     Rectangle().fill(Obs.ink.opacity(0.35)).frame(width: 16, height: 1)
-                    Text("baseline").font(Obs.mono(10)).foregroundStyle(Obs.ink2)
+                    Text("referencia").font(Obs.mono(10)).foregroundStyle(Obs.ink2)
                 }
             }
         }
