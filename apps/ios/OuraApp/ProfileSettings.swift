@@ -109,23 +109,47 @@ struct ProfileSettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Biological sex", selection: $profile.sex) {
-                        Text("Female").tag("F")
-                        Text("Male").tag("M")
-                        Text("Other").tag("O")
+                    Picker("Sexo biológico", selection: $profile.sex) {
+                        Text("Mujer").tag("F")
+                        Text("Hombre").tag("M")
+                        Text("Otro").tag("O")
                     }
-                    TextField("Age", value: $profile.age, format: .number.precision(.fractionLength(0...1)))
-                        .keyboardType(.decimalPad)
-                    TextField("Height (cm)", value: $profile.heightCm, format: .number.precision(.fractionLength(0...1)))
-                        .keyboardType(.decimalPad)
-                    TextField("Weight (kg)", value: $profile.weightKg, format: .number.precision(.fractionLength(0...1)))
-                        .keyboardType(.decimalPad)
-                    TextField("Ring size", value: $profile.ringSize, format: .number.precision(.fractionLength(0...1)))
-                        .keyboardType(.decimalPad)
+                    HStack {
+                        Text("Edad")
+                        Spacer()
+                        TextField("Edad", value: $profile.age, format: .number.precision(.fractionLength(0...1)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                    }
+                    HStack {
+                        Text("Altura (cm)")
+                        Spacer()
+                        TextField("Altura (cm)", value: $profile.heightCm, format: .number.precision(.fractionLength(0...1)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                    }
+                    HStack {
+                        Text("Peso (kg)")
+                        Spacer()
+                        TextField("Peso (kg)", value: $profile.weightKg, format: .number.precision(.fractionLength(0...1)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                    }
+                    HStack {
+                        Text("Talla del anillo")
+                        Spacer()
+                        TextField("Talla del anillo", value: $profile.ringSize, format: .number.precision(.fractionLength(0...1)))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                    }
                 } header: {
-                    Text("Your data")
+                    Text("Tus datos")
                 } footer: {
-                    Text("Stored only on this iPhone and used by the cardiovascular and activity calculations.")
+                    Text("Se guardan únicamente en este iPhone y se utilizan en los cálculos cardiovasculares y de actividad.")
                 }
 
                 Section {
@@ -139,13 +163,13 @@ struct ProfileSettingsView: View {
                                 if let v = health.age, v > 0 { profile.age = v }
                                 if let v = health.heightCm { profile.heightCm = v }
                                 if let v = health.weightKg { profile.weightKg = v }
-                                message = "Imported available values from Apple Health."
+                                message = "Datos disponibles importados de Apple Salud."
                             case .failure(let error): message = error.localizedDescription
                             }
                         }
                     } label: {
                         HStack {
-                            Label("Import from Apple Health", systemImage: "heart.text.square")
+                            Label("Importar desde Apple Salud", systemImage: "heart.text.square")
                             Spacer()
                             if importing { ProgressView() }
                         }
@@ -155,7 +179,7 @@ struct ProfileSettingsView: View {
                 }
 
                 Section {
-                    Toggle("Write ring data to Apple Health", isOn: Binding(
+                    Toggle("Exportar datos del anillo a Apple Salud", isOn: Binding(
                         get: { health.enabled },
                         set: { health.setEnabled($0, summary: SummaryCache.load()) }
                     ))
@@ -163,25 +187,25 @@ struct ProfileSettingsView: View {
                         Text(health.status).font(.footnote).foregroundStyle(Obs.ink2)
                     }
                     if health.enabled {
-                        Button("Remove Open Oura samples from Health") {
+                        Button("Eliminar los datos de Open Oura de Salud") {
                             health.removeExportedSamples()
                         }
                         .foregroundStyle(Obs.bad)
                     }
                 } header: {
-                    Text("Apple Health")
+                    Text("Apple Salud")
                 } footer: {
-                    Text("Exports workouts (and removes ones the ring no longer detects), sleep stages, heart rate, HRV, resting HR, steps, active calories, and distance. Data stays on this iPhone.")
+                    Text("Exporta entrenamientos, fases de sueño, pulso, HRV, pulso en reposo, pasos, calorías activas y distancia. Los datos permanecen en el iPhone.")
                 }
             }
             .scrollContentBackground(.hidden)
             .background(Obs.canvas.ignoresSafeArea())
-            .navigationTitle("profile")
+            .navigationTitle("Perfil")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Guardar") {
                         do {
                             try ProfileStore.save(profile)
                             onSaved()
