@@ -376,6 +376,13 @@ struct PersonalLivePulseView: View {
                                 .font(.footnote).foregroundStyle(Obs.ink2)
                         }
                     }
+                    if let estimate = ring.liveLatestEstimate {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Lectura reciente experimental").font(.headline)
+                            Text("\(estimate) ppm").font(Obs.mono(28, .medium))
+                            Text("Estimación de una lectura nueva del anillo; no equivale a una señal continua de latidos. Calidad aún sin validar.").font(.footnote).foregroundStyle(Obs.muted)
+                        }.obsCard()
+                    }
                     if !ring.liveDiagnostics.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Diagnóstico de la sesión").font(.headline)
