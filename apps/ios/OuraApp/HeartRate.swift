@@ -376,6 +376,12 @@ struct PersonalLivePulseView: View {
                                 .font(.footnote).foregroundStyle(Obs.ink2)
                         }
                     }
+                    if !ring.liveDiagnostics.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Diagnóstico de la sesión").font(.headline)
+                            Text(ring.liveDiagnostics.joined(separator: "\n")).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                        }.obsCard()
+                    }
                     Text("Ponte el anillo, permanece quieto y mantén esta pantalla abierta. La medición dura hasta 60 segundos una vez conectado. Si no se reciben latidos válidos, no se muestra un valor inventado. Función experimental, no destinada a uso médico.")
                         .font(.footnote).foregroundStyle(Obs.ink2)
                 }.padding(24)
