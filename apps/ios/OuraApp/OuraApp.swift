@@ -1083,6 +1083,7 @@ struct RootView: View {
                                 }
                             }
                             .animation(.easeInOut(duration: 0.2), value: ring.busy || isRefreshingSummary)
+                            PersonalDailyScoresView(summary: s, day: day)
                             TodayCard(s: s, day: day,
                                       onSleep: { report = ReportSel(day: day, sleep: true) },
                                       onActivity: { report = ReportSel(day: day, sleep: false) })
@@ -1276,4 +1277,213 @@ struct BuildStamp: View {
 struct OuraApp: App {
     init() { DiagStore.shared.bootstrap() }
     var body: some Scene { WindowGroup { RootView() } }
+}
+
+
+
+// Personal iOS dashboard. Scores are deliberately labelled as non-official,
+// transparent estimates. Never substitute time in bed for measured sleep.
+struct PersonalDailyScore: Identifiable {
+    var id: String { title }
+    let title: String
+    let value: Int?
+    let subtitle: String
+    let explanation: String
+    let factors: [String]
+    let icon: String
+}
+
+enum PersonalDailyScores {
+    static func positive(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
+    }
+
+    static func nonnegative(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return value
+    }
+
+    static func clamp(_ value: Double) -> Int {
+        Int(min(100, max(0, value)).rounded())
+    }
+
+    static func median(_ values: [Double]) -> Double? {
+        let v = values.sorted()
+        guard !v.isEmpty else { return nil }
+        let middle = v.count / 2
+        return v.count % 2 == 0 ? (v[middle - 1] + v[middle]) / 2 : v[middle]
+    }
+
+    static func sleep(_ summary: Summary, day: String, goal: Double) -> PersonalDailyScore {
+        let night = summary.night(forDay: day)
+        if let score = night?.sleep_score, score.score.isFinite,
+           night?.stagingComplete == true,
+           score.components.contains(where: { $0.key == "duration" }) {
+            let names = ["duration": "Duración", "efficiency": "Eficiencia",
+                         "onset_latency": "Tiempo hasta dormir", "waso": "Tiempo despierto",
+                         "awakenings": "Despertares", "architecture": "Fases del sueño",
+                         "physiology": "Pulso y HRV"]
+            return PersonalDailyScore(title: "Sueño", value: clamp(score.score),
+                subtitle: "Índice del proyecto",
+                explanation: "Puntuación del algoritmo de sueño de Open Oura, basado en referencias de la literatura. No equivale al índice oficial de Oura ni es una valoración clínica.",
+                factors: score.components.filter { $0.score.isFinite }.map {
+                    "\(names[$0.key] ?? $0.key): \(clamp($0.score))/100"
+                }, icon: "moon.fill")
+        }
+        let hours = positive(night?.in_bed_h)
+        let value = hours.map { clamp($0 / max(1, goal) * 100) }
+        return PersonalDailyScore(title: "Sueño", value: value,
+            subtitle: value == nil ? "Sin datos" : "Solo tiempo en cama",
+            explanation: "Sin análisis completo de fases no conocemos el tiempo realmente dormido. Este número es únicamente el porcentaje de tu objetivo de tiempo en cama (limitado a 100), no una puntuación de calidad del sueño.",
+            factors: [hours.map { String(format: "Tiempo en cama: %.1f h", $0) } ?? "Sin ventana nocturna",
+                      String(format: "Objetivo: %.1f h", goal),
+                      "Fases y eficiencia: no evaluadas"], icon: "moon.fill")
+    }
+
+    static func activity(_ summary: Summary, day: String, stepsGoal: Int, activeGoal: Int) -> PersonalDailyScore {
+        let steps = nonnegative(summary.activity_daily[day]?.steps)
+        let profile = summary.activity_profile[day] ?? []
+        // Match the existing ActivityReport's 3-MET threshold and bucket length.
+        let hasProfile = !profile.isEmpty && profile.allSatisfy { $0.isFinite && $0 >= 0 }
+        let activeMinutes: Double? = hasProfile
+            ? Double(profile.filter { $0 >= 3 }.count) * 1440 / Double(profile.count)
+            : nil
+        var pieces: [Double] = []
+        var factors: [String] = []
+        if let steps {
+            pieces.append(min(1, steps / Double(max(1, stepsGoal))))
+            factors.append("\(Int(steps.rounded())) de \(stepsGoal) pasos")
+        }
+        if let activeMinutes {
+            pieces.append(min(1, activeMinutes / Double(max(1, activeGoal))))
+            factors.append("\(Int(activeMinutes.rounded())) de \(activeGoal) min activos")
+        }
+        let value: Int? = pieces.isEmpty ? nil : clamp(100 * pieces.reduce(0, +) / Double(pieces.count))
+        return PersonalDailyScore(title: "Actividad", value: value,
+            subtitle: pieces.isEmpty ? "Sin datos" : (pieces.count < 2 ? "Objetivo parcial" : "Progreso del día"),
+            explanation: "Promedio del porcentaje de los objetivos disponibles de pasos y minutos activos (3 MET o más, como en el informe original). Cada componente se limita al 100%. Los objetivos son editables. No mide recuperación ni calidad del entrenamiento; una jornada en curso puede tener un valor bajo.",
+            factors: factors, icon: "figure.walk")
+    }
+
+    static func recovery(_ summary: Summary, day: String) -> PersonalDailyScore {
+        let missing = PersonalDailyScore(title: "Recuperación", value: nil,
+            subtitle: "Calculando referencia",
+            explanation: "Se necesitan pulso en reposo y HRV de una noche principal y al menos siete noches anteriores con ambas medidas. No se inventan valores para los datos ausentes. Índice orientativo, no oficial ni clínico.",
+            factors: [], icon: "heart.fill")
+        guard let night = summary.night(forDay: day),
+              (night.in_bed_h ?? 0) >= 3,
+              let hrv = positive(night.hrv_ms), let rhr = positive(night.rhr),
+              let start = night.start_unix else { return missing }
+        let history = summary.days.filter { $0 < day }.compactMap { summary.night(forDay: $0) }
+            .filter { n in
+                guard let end = n.end_unix else { return false }
+                return end <= start && (n.in_bed_h ?? 0) >= 3
+                    && positive(n.hrv_ms) != nil && positive(n.rhr) != nil
+            }
+        let prior = Array(history.prefix(28))
+        guard prior.count >= 7,
+              let baseHRV = median(prior.compactMap { positive($0.hrv_ms) }),
+              let baseRHR = median(prior.compactMap { positive($0.rhr) }) else { return missing }
+        // Heuristic (not Oura Readiness): lower HRV and higher resting HR relative to
+        // a causal personal median reduce the index. No diagnosis or exercise advice.
+        let hrvPart = max(0, 100 - max(0, 1 - hrv / baseHRV) * 200)
+        let rhrPart = max(0, 100 - max(0, rhr / baseRHR - 1) * 400)
+        return PersonalDailyScore(title: "Recuperación", value: clamp((hrvPart + rhrPart) / 2),
+            subtitle: "Índice orientativo",
+            explanation: "Estimación experimental basada exclusivamente en HRV y pulso nocturno en reposo frente a la mediana de hasta 28 noches anteriores (mínimo 7). Ambos componentes pesan un 50%. Un descenso de HRV del 10% resta 20 puntos a su componente; una subida de pulso del 10% resta 40. No mide la preparación real para entrenar ni reproduce Oura Readiness.",
+            factors: [String(format: "HRV: %.0f ms · referencia %.0f ms", hrv, baseHRV),
+                      String(format: "Pulso: %.0f lpm · referencia %.0f lpm", rhr, baseRHR),
+                      "Noches de referencia: \(prior.count)"], icon: "heart.fill")
+    }
+}
+
+private struct PersonalDailyScoresView: View {
+    let summary: Summary
+    let day: String
+    @AppStorage("personal.goals.steps") private var stepsGoal = 8000
+    @AppStorage("personal.goals.activeMinutes") private var activeGoal = 30
+    @AppStorage("personal.goals.inBedHours") private var bedGoal = 8.0
+    @State private var selected: PersonalDailyScore?
+    @State private var showGoals = false
+
+    private var scores: [PersonalDailyScore] {
+        [PersonalDailyScores.sleep(summary, day: day, goal: bedGoal),
+         PersonalDailyScores.recovery(summary, day: day),
+         PersonalDailyScores.activity(summary, day: day, stepsGoal: stepsGoal, activeGoal: activeGoal)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Tus índices · \(day)").font(Obs.prose(14, .medium)).foregroundStyle(Obs.ink)
+                Spacer()
+                Button { showGoals = true } label: {
+                    Label("Objetivos", systemImage: "slider.horizontal.3").font(Obs.prose(12))
+                }.buttonStyle(.plain)
+            }
+            HStack(alignment: .top, spacing: 6) {
+                ForEach(scores) { score in
+                    Button { selected = score } label: {
+                        VStack(spacing: 5) {
+                            ZStack {
+                                Circle().stroke(Obs.trace.opacity(0.3), lineWidth: 6)
+                                if let value = score.value {
+                                    Circle().trim(from: 0, to: CGFloat(value) / 100)
+                                        .stroke(Obs.good, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                                        .rotationEffect(.degrees(-90))
+                                }
+                                VStack(spacing: 1) {
+                                    Text(score.value.map { String($0) } ?? "–")
+                                        .font(Obs.mono(23, .medium)).foregroundStyle(Obs.ink)
+                                    Text("/100").font(Obs.mono(9)).foregroundStyle(Obs.muted)
+                                }
+                            }
+                            .frame(width: 72, height: 72)
+                            Label(score.title, systemImage: score.icon)
+                                .font(Obs.prose(11, .medium)).foregroundStyle(Obs.ink)
+                                .lineLimit(1).minimumScaleFactor(0.7)
+                            Text(score.subtitle).font(Obs.prose(10)).foregroundStyle(Obs.ink2)
+                                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                        }.frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(score.title), \(score.value.map { String($0) + " de 100" } ?? "sin datos"), \(score.subtitle)")
+                }
+            }
+            Text("Índices propios, no puntuaciones oficiales de Oura.")
+                .font(Obs.prose(11)).foregroundStyle(Obs.muted)
+        }
+        .obsCard()
+        .sheet(item: $selected) { score in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Label(score.title, systemImage: score.icon).font(Obs.serif(26))
+                    Text(score.value.map { "\($0)/100" } ?? "Sin datos suficientes")
+                        .font(Obs.mono(28, .medium))
+                    Text(score.subtitle).font(Obs.prose(15, .medium))
+                    Text(score.explanation).font(Obs.prose(14))
+                    ForEach(Array(score.factors.enumerated()), id: \.offset) { item in
+                        Text(item.element).font(Obs.prose(14))
+                    }
+                    Button("Cerrar") { selected = nil }.buttonStyle(.bordered)
+                }.foregroundStyle(Obs.ink).padding(24)
+            }.background(Obs.paper)
+        }
+        .sheet(isPresented: $showGoals) {
+            NavigationStack {
+                Form {
+                    Stepper("Pasos: \(stepsGoal)", value: $stepsGoal, in: 1000...30000, step: 500)
+                    Stepper("Minutos activos: \(activeGoal)", value: $activeGoal, in: 5...180, step: 5)
+                    Stepper("Tiempo en cama: \(bedGoal, specifier: "%.1f") h", value: $bedGoal, in: 5...12, step: 0.5)
+                    Text("Estos objetivos son preferencias personales, no recomendaciones médicas. El de tiempo en cama no sustituye un análisis del sueño.")
+                        .font(.footnote)
+                }
+                .navigationTitle("Objetivos diarios")
+                .toolbar { ToolbarItem(placement: .topBarTrailing) {
+                    Button("Listo") { showGoals = false }
+                } }
+            }
+        }
+    }
 }
