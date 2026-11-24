@@ -751,7 +751,7 @@ struct DiagnosticsShare: UIViewControllerRepresentable {
 /// The top-bar sync affordance doubles as a live status light and the entry point
 /// to diagnostics. Motion stays quiet: one slow continuous turn only while BLE is
 /// active.
-private struct SyncIndicatorButton: View {
+struct SyncIndicatorButton: View {
     @ObservedObject var ring: RingSync
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -771,7 +771,7 @@ private struct SyncIndicatorButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(ring.busy ? "Sincronización en curso" : "Sincronización y diagnóstico")
-        .accessibilityHint("Opens sync status, logs, and manual controls")
+        .accessibilityHint("Abre el estado de sincronización, los registros y los controles manuales")
         .onAppear(perform: updateAnimation)
         .onChange(of: ring.busy) { _, _ in updateAnimation() }
         .onChange(of: reduceMotion) { _, _ in updateAnimation() }
