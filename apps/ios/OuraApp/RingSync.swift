@@ -309,6 +309,10 @@ final class SyncProgressBridge: SyncProgressListener, @unchecked Sendable {
 /// Orchestrates a sync and exposes progress to the UI.
 @MainActor
 final class RingSync: ObservableObject {
+    @Published var liveSamples: [Double] = []
+    @Published var liveActive = false
+    @Published var liveStatus = "Pulsa iniciar con el anillo puesto."
+    private var liveStopping = false
     @Published var status: String = ""
     @Published var busy = false
     @Published private(set) var exportStatus: String?
@@ -344,6 +348,10 @@ final class RingSync: ObservableObject {
     private var lifecycleObservers: [NSObjectProtocol] = []
 
     func pause() {
+        if liveActive {
+            stopLivePulse()
+            return
+        }
         paused = true
         session?.cancel(reason: "paused")
         transport?.abort()
@@ -382,6 +390,75 @@ final class RingSync: ObservableObject {
     /// when the last sync was interrupted mid-drain, the checkpointed cursor means
     /// data is sitting half-transferred on the ring, so resume eagerly with the
     /// retry loop instead of silently giving up.
+    func stopLivePulse() {
+        guard liveActive else { return }
+        liveStopping = true
+        liveStatus = "Deteniendo…"
+        if let session { session.cancel(reason: "user stopped live pulse") }
+        else { transport?.abort() }
+    }
+
+    func startLivePulse() async {
+        guard !busy, !liveActive else { return }
+        guard let key = Keychain.loadKey() else {
+            liveStatus = "Vincula y sincroniza el anillo primero."
+            return
+        }
+        guard WorkCoordinator.shared.available else { return }
+        busy = true
+        liveActive = true
+        liveStopping = false
+        liveSamples = []
+        liveStatus = "Buscando tu anillo…"
+        WorkCoordinator.shared.invalidateAnalysis()
+        await WorkGate.shared.acquire()
+        IdleTimerLock.acquire("live-pulse")
+        defer {
+            pump?.cancel()
+            pump = nil
+            transport?.disconnect()
+            transport = nil
+            session = nil
+            liveActive = false
+            busy = false
+            IdleTimerLock.release("live-pulse")
+            Task { await WorkGate.shared.release() }
+            WorkCoordinator.shared.endCleanup()
+        }
+        guard !liveStopping, WorkCoordinator.shared.available else {
+            liveStatus = "Medición detenida."
+            return
+        }
+        let t = BLETransport(nameContains: "Oura", preferredPeripheralID: preferredPeripheralID)
+        transport = t
+        do {
+            try await t.connect()
+            guard !liveStopping else { liveStatus = "Medición detenida."; return }
+            let s = RingSession(writer: RingWriter(t))
+            session = s
+            let frames = t.notifications
+            pump = Task {
+                for await frame in frames { s.pushFrame(data: frame) }
+                s.cancel(reason: "transport closed")
+            }
+            liveStatus = "Conectado. Esperando señal válida…"
+            let listener = LivePulseBridge { [weak self] bpm in
+                guard let self, self.liveActive, !self.liveStopping else { return }
+                self.liveSamples.append(Double(bpm))
+                self.liveStatus = "Recibiendo pulsaciones"
+            }
+            let count = try await s.measureLivePulse(keyHex: key, expectedSerial: knownSerial ?? "",
+                                                     seconds: 60, listener: listener)
+            // The transport writer queues requests. Allow the upstream automatic
+            // mode restoration write to reach the ring before disconnecting.
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            liveStatus = liveStopping ? "Medición detenida." :
+                (count == 0 ? "Sin señal válida. Lleva el anillo puesto y permanece quieto." : "Medición finalizada.")
+        } catch {
+            liveStatus = liveStopping ? "Medición detenida." : "No se pudo medir. Comprueba la conexión Bluetooth."
+        }
+    }
+
     func syncAutomaticallyIfNeeded(now: Date = Date()) async -> SyncReport? {
         guard WorkCoordinator.shared.available, !busy, let key = Keychain.loadKey() else { return nil }
         let resuming = hasIncompleteSync
@@ -869,5 +946,14 @@ final class RingSync: ObservableObject {
     private static func isAuthenticationFailure(_ error: Error) -> Bool {
         let s = String(describing: error).lowercased()
         return s.contains("authentication failed") || s.contains("ring rejected auth")
+    }
+}
+
+
+final class LivePulseBridge: LivePulseListener, @unchecked Sendable {
+    private let update: @MainActor (UInt16) -> Void
+    init(_ update: @escaping @MainActor (UInt16) -> Void) { self.update = update }
+    func onSample(bpm: UInt16, ibiMs: UInt16) {
+        Task { @MainActor in self.update(bpm) }
     }
 }
