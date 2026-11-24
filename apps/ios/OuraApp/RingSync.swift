@@ -309,6 +309,7 @@ final class SyncProgressBridge: SyncProgressListener, @unchecked Sendable {
 /// Orchestrates a sync and exposes progress to the UI.
 @MainActor
 final class RingSync: ObservableObject {
+    @Published var liveDiagnostics: [String] = []
     @Published var liveSamples: [Double] = []
     @Published var liveActive = false
     @Published var liveStatus = "Pulsa iniciar con el anillo puesto."
@@ -409,6 +410,7 @@ final class RingSync: ObservableObject {
         liveActive = true
         liveStopping = false
         liveSamples = []
+        liveDiagnostics = []
         liveStatus = "Buscando tu anillo…"
         WorkCoordinator.shared.invalidateAnalysis()
         await WorkGate.shared.acquire()
@@ -446,6 +448,10 @@ final class RingSync: ObservableObject {
                 guard let self, self.liveActive, !self.liveStopping else { return }
                 self.liveSamples.append(Double(bpm))
                 self.liveStatus = "Recibiendo pulsaciones"
+            } diagnostic: { [weak self] message in
+                guard let self else { return }
+                self.liveDiagnostics.append(message)
+                if self.liveDiagnostics.count > 30 { self.liveDiagnostics.removeFirst() }
             }
             let count = try await s.measureLivePulse(keyHex: key, expectedSerial: knownSerial ?? "",
                                                      seconds: 60, listener: listener)
@@ -952,7 +958,14 @@ final class RingSync: ObservableObject {
 
 final class LivePulseBridge: LivePulseListener, @unchecked Sendable {
     private let update: @MainActor (UInt16) -> Void
-    init(_ update: @escaping @MainActor (UInt16) -> Void) { self.update = update }
+    private let diagnostic: @MainActor (String) -> Void
+    init(_ update: @escaping @MainActor (UInt16) -> Void, diagnostic: @escaping @MainActor (String) -> Void) {
+        self.update = update
+        self.diagnostic = diagnostic
+    }
+    func onDiagnostic(message: String) {
+        Task { @MainActor in self.diagnostic(message) }
+    }
     func onSample(bpm: UInt16, ibiMs: UInt16) {
         Task { @MainActor in self.update(bpm) }
     }
