@@ -65,7 +65,7 @@ enum HourlyHR {
                        max: (row["max"] as? NSNumber)?.doubleValue ?? high,
                        count: (row["count"] as? NSNumber)?.intValue ?? 0)
         }
-        let latest = (root["latest"] as? [String: Any]).flatMap { l -> Reading? in
+        let latest = (root["Última medición"] as? [String: Any]).flatMap { l -> Reading? in
             guard let bpm = (l["bpm"] as? NSNumber)?.doubleValue,
                   let unix = (l["unix"] as? NSNumber)?.doubleValue else { return nil }
             return Reading(bpm: bpm, unix: unix)
@@ -107,11 +107,11 @@ struct HourlyHeartRateSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                ObsTag("hourly", icon: "chart.bar.fill")
+                ObsTag("Por horas", icon: "chart.bar.fill")
                 Spacer()
                 if loading { ProgressView().controlSize(.mini).tint(Obs.ink) }
             }
-            Picker("Window", selection: $window) {
+            Picker("Periodo", selection: $window) {
                 ForEach(HourlyWindow.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -121,8 +121,8 @@ struct HourlyHeartRateSection: View {
                 Text(error).font(Obs.mono(12)).foregroundStyle(Obs.bad)
                     .fixedSize(horizontal: false, vertical: true)
             } else if visible.isEmpty {
-                Text(loading ? "Reading the ring database…"
-                             : "No beats stored for this window yet. Sync the ring.")
+                Text(loading ? "Leyendo los datos del anillo…"
+                             : "Todavía no hay pulsaciones en este periodo. Sincroniza el anillo.")
                     .font(Obs.mono(12)).foregroundStyle(Obs.ink2)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -156,7 +156,7 @@ struct HourlyHeartRateSection: View {
                     Text("\(Int(latest.bpm.rounded()))")
                         .font(Obs.mono(30, .medium)).foregroundStyle(Obs.ink).monospacedDigit()
                     Text("bpm").font(Obs.mono(13)).foregroundStyle(Obs.ink2)
-                    Text("latest").font(Obs.mono(10)).foregroundStyle(Obs.muted)
+                    Text("Última medición").font(Obs.mono(10)).foregroundStyle(Obs.muted)
                 }
                 Text(Self.stamp(latest.unix)).font(Obs.mono(10)).foregroundStyle(Obs.muted)
             }
@@ -170,7 +170,7 @@ struct HourlyHeartRateSection: View {
                     .font(Obs.mono(9)).foregroundStyle(Obs.ink2)
             }
             Spacer()
-            Text("touch a bar for that hour").font(Obs.mono(9)).foregroundStyle(Obs.muted)
+            Text("Toca una barra para ver esa hora").font(Obs.mono(9)).foregroundStyle(Obs.muted)
             Spacer()
             if let last = visible.last {
                 Text(Self.dayLabel(last) + " " + String(format: "%02d:00", last.hour))
@@ -184,10 +184,10 @@ struct HourlyHeartRateSection: View {
         let beats = visible.reduce(0) { $0 + $1.count }
         let weighted = visible.reduce(0.0) { $0 + $1.median * Double($1.count) }
         return VStack(spacing: 10) {
-            if let lo = lows.min() { ObsStat(label: "quietest hour", value: "\(Int(lo.rounded())) bpm") }
-            if let hi = highs.max() { ObsStat(label: "busiest hour", value: "\(Int(hi.rounded())) bpm") }
-            if beats > 0 { ObsStat(label: "typical", value: "\(Int((weighted / Double(beats)).rounded())) bpm") }
-            ObsStat(label: "hours with data", value: "\(visible.count)/\(window.hours)")
+            if let lo = lows.min() { ObsStat(label: "Hora más tranquila", value: "\(Int(lo.rounded())) bpm") }
+            if let hi = highs.max() { ObsStat(label: "Hora más activa", value: "\(Int(hi.rounded())) bpm") }
+            if beats > 0 { ObsStat(label: "Valor habitual", value: "\(Int((weighted / Double(beats)).rounded())) bpm") }
+            ObsStat(label: "Horas con datos", value: "\(visible.count)/\(window.hours)")
         }
         .padding(.top, 2)
     }
@@ -308,5 +308,125 @@ private struct HourlyRangeChart: View {
     private var midnightOffset: Int {
         let tz = Int(HourlyHR.tzOffset) * 3600
         return ((-tz) % 86_400 + 86_400) % 86_400
+    }
+}
+
+
+// V3: only authenticated samples delivered by the live Bluetooth session.
+@MainActor
+struct PersonalLivePulseView: View {
+    @ObservedObject var ring: RingSync
+    @Environment(\.dismiss) private var dismiss
+    private var samples: [Double] { ring.liveSamples }
+    private var mean: Double? {
+        samples.isEmpty ? nil : samples.reduce(0, +) / Double(samples.count)
+    }
+    private func bpm(_ n: Double?) -> String {
+        guard let n, n.isFinite else { return "–" }
+        return String(Int(n.rounded()))
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(spacing: 9) {
+                        Image(systemName: "heart.fill").font(.system(size: 30)).foregroundStyle(Obs.alert)
+                        Text(bpm(samples.last)).font(Obs.mono(62, .medium)).monospacedDigit()
+                            .foregroundStyle(Obs.ink)
+                        Text("pulsaciones por minuto").font(.subheadline).foregroundStyle(Obs.ink2)
+                        Text(ring.liveStatus).font(.subheadline).multilineTextAlignment(.center)
+                            .foregroundStyle(Obs.ink2)
+                        if ring.liveActive { ProgressView().tint(Obs.good) }
+                        else if !samples.isEmpty {
+                            Text("Última sesión · no es una lectura actual").font(.caption)
+                                .foregroundStyle(Obs.muted)
+                        }
+                    }.frame(maxWidth: .infinity).padding(.vertical, 12)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Pulsaciones de la sesión").font(.headline)
+                        if samples.count >= 2 {
+                            PersonalPulseChart(samples: Array(samples.suffix(120))).frame(height: 150)
+                        } else {
+                            Text("El gráfico aparecerá al recibir suficientes latidos válidos.")
+                                .font(.subheadline).foregroundStyle(Obs.muted)
+                        }
+                        HStack {
+                            statistic("Mínima", samples.min())
+                            Spacer()
+                            statistic("Media", mean)
+                            Spacer()
+                            statistic("Máxima", samples.max())
+                        }
+                        Text("\(samples.count) latidos válidos recibidos").font(.caption)
+                            .foregroundStyle(Obs.muted)
+                    }.obsCard()
+                    if ring.liveActive {
+                        Button { ring.stopLivePulse() } label: {
+                            Label("Detener medición", systemImage: "stop.fill")
+                                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }.buttonStyle(.borderedProminent).tint(Obs.alert)
+                    } else {
+                        Button { Task { await ring.startLivePulse() } } label: {
+                            Label("Iniciar medición (60 s)", systemImage: "heart")
+                                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }.buttonStyle(.borderedProminent).tint(Obs.good).disabled(ring.busy)
+                        if ring.busy {
+                            Text("Hay una sincronización en curso. La medición estará disponible cuando termine.")
+                                .font(.footnote).foregroundStyle(Obs.ink2)
+                        }
+                    }
+                    Text("Ponte el anillo, permanece quieto y mantén esta pantalla abierta. La medición dura hasta 60 segundos una vez conectado. Si no se reciben latidos válidos, no se muestra un valor inventado. Función experimental, no destinada a uso médico.")
+                        .font(.footnote).foregroundStyle(Obs.ink2)
+                }.padding(24)
+            }
+            .background(Obs.canvas)
+            .navigationTitle("Pulso en directo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cerrar") { ring.stopLivePulse(); dismiss() }
+                }
+            }
+            .onDisappear { ring.stopLivePulse() }
+        }
+    }
+
+    private func statistic(_ title: String, _ value: Double?) -> some View {
+        VStack(spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(Obs.ink2)
+            Text(bpm(value)).font(Obs.mono(22, .medium)).foregroundStyle(Obs.ink)
+            Text("ppm").font(.caption2).foregroundStyle(Obs.muted)
+        }
+    }
+}
+
+private struct PersonalPulseChart: View {
+    let samples: [Double]
+    var body: some View {
+        let low = (samples.min() ?? 60) - 5
+        let high = (samples.max() ?? 80) + 5
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(Int(high.rounded())) ppm").font(.caption2).foregroundStyle(Obs.muted)
+            GeometryReader { geo in
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(Obs.rule.opacity(0.35))
+                    Path { p in
+                        for (i, v) in samples.enumerated() {
+                            let x = geo.size.width * CGFloat(i) / CGFloat(max(1, samples.count - 1))
+                            let y = geo.size.height * CGFloat(1 - (v - low) / max(1, high - low))
+                            let point = CGPoint(x: x, y: y)
+                            if i == 0 { p.move(to: point) } else { p.addLine(to: point) }
+                        }
+                    }.stroke(Obs.alert, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+                }
+            }
+            HStack {
+                Text("\(Int(low.rounded())) ppm")
+                Spacer()
+                Text("Últimos \(samples.count) latidos")
+            }.font(.caption2).foregroundStyle(Obs.muted)
+        }
+        .accessibilityLabel("Gráfico de pulsaciones válidas por orden de llegada")
     }
 }
