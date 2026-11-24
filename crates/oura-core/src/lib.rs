@@ -294,6 +294,12 @@ pub trait SyncProgressListener: Send + Sync {
     fn on_progress(&self, stage: String, bytes_left: u64, events_synced: u32);
 }
 
+/// Receives valid real-time IBI-derived samples, not cached/history values.
+#[uniffi::export(callback_interface)]
+pub trait LivePulseListener: Send + Sync {
+    fn on_sample(&self, bpm: u16, ibi_ms: u16);
+}
+
 #[derive(uniffi::Record)]
 pub struct SyncReport {
     pub serial: String,
@@ -561,6 +567,69 @@ impl RingSession {
                 reason: stop.borrow().clone().unwrap_or_else(|| "cancelled".into()) }),
             result = self.sync_inner(db_path, key_hex, progress) => result,
         }
+    }
+
+    /// A bounded, authenticated live session. Restore the ring's automatic HR
+    /// mode on cancellation as well as on normal completion. Never modify pairing
+    /// keys or the history cursor.
+    pub async fn measure_live_pulse(
+        &self,
+        key_hex: String,
+        expected_serial: String,
+        seconds: u32,
+        listener: Box<dyn LivePulseListener>,
+    ) -> Result<u32, SyncError> {
+        use oura_protocol::protocol::{self, feature, feature_mode};
+        use std::time::Duration;
+        let key = parse_key(&key_hex)
+            .ok_or_else(|| SyncError::Failed("invalid pairing key".into()))?;
+        let mut stop = self.stop.subscribe();
+        if stop.borrow().is_some() {
+            return Ok(0);
+        }
+        let client = OuraClient::new(FfiTransport {
+            tx: self.tx.clone(),
+            writer: self.writer.clone(),
+        });
+        tokio::select! {
+            biased;
+            _ = stop.changed() => return Ok(0),
+            result = client.authenticate(&key) => result.map_err(|e| SyncError::Failed(e.to_string()))?,
+        };
+        if !expected_serial.is_empty() {
+            let serial = tokio::select! {
+                biased;
+                _ = stop.changed() => return Ok(0),
+                result = client.serial() => result.map_err(|e| SyncError::Failed(e.to_string()))?,
+            };
+            if !serial.eq_ignore_ascii_case(&expected_serial) {
+                return Err(SyncError::Failed("unexpected ring serial".into()));
+            }
+        }
+        let mut count = 0u32;
+        let result = tokio::select! {
+            biased;
+            _ = stop.changed() => None,
+            result = client.live_heart_rate(
+                Duration::from_secs(u64::from(seconds.clamp(5, 120))),
+                false,
+                |sample| {
+                    count += 1;
+                    listener.on_sample(sample.bpm, sample.ibi_ms);
+                },
+            ) => Some(result),
+        };
+        // The upstream method restores AUTOMATIC on normal completion, but
+        // dropping its future on cancellation bypasses that tail.
+        if !matches!(&result, Some(Ok(()))) {
+            let _ = client.transport().write(&protocol::req_set_feature_mode(
+                feature::DAYTIME_HR, feature_mode::AUTOMATIC,
+            )).await;
+        }
+        if let Some(result) = result {
+            result.map_err(|e| SyncError::Failed(e.to_string()))?;
+        }
+        Ok(count)
     }
 
     /// Pair with a **factory-reset** ring: install a 16-byte app-auth key over the
