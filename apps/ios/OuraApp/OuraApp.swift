@@ -801,7 +801,7 @@ struct RootView: View {
         if args.contains("-openSync") { showSync = true }
         if args.contains("-openAllDays") { showAllDays = true }
         if let index = args.firstIndex(of: "-openDay"), index + 1 < args.count {
-            report = ReportSel(day: args[index + 1], sleep: !args.contains("actividad"))
+            report = ReportSel(day: args[index + 1], sleep: !args.contains("activity"))
         }
     }
     @State private var showAllDays = false
@@ -1039,195 +1039,18 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private func content(_ s: Summary) -> some View {
-        let latestTemp = s.nights.first { $0.skin_temp != nil }
-        let latestOxygen = s.nights.first { $0.spo2_mean != nil }
-        let recentTemperatures = Array(s.nights.compactMap(\.skin_temp).prefix(14).reversed())
-        let recentOxygen = Array(s.nights.compactMap(\.spo2_mean).prefix(14).reversed())
-        let latestHR = s.vitals.hr
-        ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("Open Oura").font(Obs.serif(22)).foregroundStyle(Obs.ink)
-                        Text("V3.2").font(Obs.mono(9, .medium)).tracking(1.2).foregroundStyle(Obs.muted)
-                        Spacer()
-                        Button { showProfile = true } label: {
-                            Image(systemName: "person.crop.circle")
-                                .font(.system(size: 17)).foregroundStyle(Obs.ink2)
-                        }
-                        SyncIndicatorButton(ring: ring) { showSync = true }
-                    }
-
-                    Button { showLivePulse = true } label: {
-                        HStack {
-                            Image(systemName: "heart.fill").foregroundStyle(Obs.alert)
-                            Text("Pulso en directo").font(Obs.prose(15, .medium)).foregroundStyle(Obs.ink)
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(Obs.muted)
-                        }.frame(maxWidth: .infinity)
-                    }.buttonStyle(.plain).obsCard()
-
-                    if let err = s.error {
-                        ObsTag("sin datos"); Text(err).font(Obs.mono(13)).foregroundStyle(Obs.bad)
-                    } else {
-                        // digest headline
-                        if let d = s.digest {
-                            Text(d == "Synced. Not enough history yet for trends." ? "Sincronizado. Aún no hay suficiente historial para ver tendencias." : d).font(Obs.prose(16, .regular)).foregroundStyle(Obs.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        // today — last night's sleep + that day's activity as one unit, the
-                        // hero of the home; tap the sleep or the activity region for its report.
-                        if let day = s.days.first {
-                            HStack(spacing: 9) {
-                                ObsTag(displayedDayLabel(day), icon: "sun.max.fill")
-                                    .fixedSize()
-                                if displayedDayLabel(day) != day {
-                                    Text(String(day.suffix(5))).font(Obs.mono(11)).foregroundStyle(Obs.muted)
-                                }
-                                if ring.busy || isRefreshingSummary {
-                                    ProgressView().controlSize(.mini).scaleEffect(0.68).tint(Obs.ink)
-                                    // one line next to the tag: short labels, no wrapping
-                                    Text((ring.busy ? "Sincronizando el anillo" : (modelProgress.label ?? "Analizando datos guardados")).lowercased()).font(Obs.mono(9, .medium))
-                                        .tracking(0.6).foregroundStyle(Obs.ink2)
-                                        .lineLimit(1).minimumScaleFactor(0.8).truncationMode(.tail)
-                                }
-                            }
-                            .animation(.easeInOut(duration: 0.2), value: ring.busy || isRefreshingSummary)
-                            PersonalDailyScoresView(summary: s, day: day)
-                            TodayCard(s: s, day: day,
-                                      onSleep: { report = ReportSel(day: day, sleep: true) },
-                                      onActivity: { report = ReportSel(day: day, sleep: false) })
-                        }
-
-                        // vitals
-                        ObsRule()
-                        ObsTag("signos vitales", icon: "waveform.path.ecg")
-                        HStack(alignment: .top, spacing: 24) {
-                            VitalCell(tag: "HRV nocturna", value: f(s.vitals.hrv.latest), unit: "ms",
-                                      delta: s.vitals.hrv.delta_pct, series: s.vitals.hrv.series,
-                                      baseline: s.vitals.hrv.baseline,
-                                      action: { vital = .hrv })
-                            VitalCell(tag: "frecuencia cardíaca",
-                                      value: f(latestHR?.latest ?? s.vitals.rhr.latest), unit: "bpm",
-                                      series: s.vitals.rhr.series,
-                                      baseline: s.vitals.rhr.baseline,
-                                      deltaGoodWhenPositive: false,
-                                      detail: latestHR.map { latestLabel(date: $0.date, time: $0.hm) }
-                                          ?? "mínima nocturna",
-                                      action: { vital = .heartRate })
-                        }
-                        HStack(alignment: .top, spacing: 24) {
-                            VitalCell(tag: "temperatura cutánea",
-                                      value: latestTemp?.skin_temp.map { String(format: "%.1f", $0) } ?? "–",
-                                      unit: "°c",
-                                      series: recentTemperatures,
-                                      detail: latestTemp.map { latestLabel(date: s.wakeYmd($0)) },
-                                      action: { vital = .temp })
-                            VitalCell(tag: "oxígeno en sangre", value: f(latestOxygen?.spo2_mean), unit: "%",
-                                      series: recentOxygen,
-                                      detail: latestOxygen.map { latestLabel(date: s.wakeYmd($0)) },
-                                      action: { vital = .oxygen })
-                        }
-
-                        if let debt = s.sleepDebt {
-                            ObsRule()
-                            SleepDebtCard(debt: debt) { showSleepDebt = true }
-                        }
-
-                        // Torch build: Oura's own illness model. Otherwise the shared
-                        // core's baseline comparison over the same four biomarkers.
-                        if let radar = s.symptomRadar, radar.available {
-                            ObsRule()
-                            IllnessCard(illness: radar)
-                        }
-
-                        // Cardiovascular estimates belong together: vascular age/PWV
-                        // from raw PPG plus the demographic VO₂max estimate.
-                        if s.cardio?.vascular_age != nil || s.fitness?.vo2max != nil {
-                            ObsRule()
-                            ObsTag("cardiovascular", icon: "heart.fill")
-                            VStack(spacing: 12) {
-                                if let cv = s.cardio, let va = cv.vascular_age {
-                                    ObsStat(label: "edad vascular", value: String(format: "%.1f yr", va))
-                                    if let ca = cv.chronological_age { ObsStat(label: "respecto a tu edad", value: relAge(va - ca)) }
-                                    if let pwv = cv.pwv_ms { ObsStat(label: "velocidad de onda de pulso", value: String(format: "%.2f m/s", pwv)) }
-                                    if let seg = cv.segments { ObsStat(label: "segmentos analizados", value: "\(seg)") }
-                                }
-                                if let vo = s.fitness?.vo2max {
-                                    ObsStat(label: "VO₂ máx. estimado", value: String(format: "%.1f ml/kg/min", vo))
-                                }
-                            }
-                        }
-
-                        // browse every day → per-day detail (sleep + activity)
-                        if !s.days.isEmpty {
-                            ObsRule()
-                            Button { showAllDays = true } label: {
-                                HStack {
-                                    ObsTag("historial", icon: "calendar")
-                                    Text("\(s.days.count)").font(Obs.mono(11)).foregroundStyle(Obs.muted)
-                                    Spacer()
-                                    Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Obs.trace)
-                                }.contentShape(Rectangle())
-                            }.buttonStyle(.plain)
-                        }
-
-                        // nights the shared brain withheld because the ring clock could not
-                        // be resolved unambiguously (missing anchor, accelerated counter, or
-                        // multi-reboot stall)
-                        if let warnings = s.clock?.warnings, !warnings.isEmpty {
-                            ObsTag("reloj del anillo", icon: "clock.badge.exclamationmark")
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(warnings, id: \.self) { w in
-                                    Text("• \(w)").font(Obs.mono(11)).foregroundStyle(Obs.bad)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-
-                        // on-device model failures (empty unless a torch model genuinely
-                        // failed — a missing bundle or an inference error, not just no data)
-                        if !s.modelErrors.isEmpty {
-                            ObsTag("modelos locales", icon: "exclamationmark.triangle")
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(s.modelErrors, id: \.self) { e in
-                                    Text("• \(e)").font(Obs.mono(11)).foregroundStyle(Obs.bad)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-
-                        // device & data health
-                        ObsRule()
-                        ObsTag("dispositivo", icon: "cpu")
-                        VStack(spacing: 10) {
-                            ObsStat(label: "número de serie", value: s.device?.serial ?? "–")
-                            ObsStat(label: "firmware", value: s.device?.firmware ?? "–")
-                            ObsStat(label: "batería",
-                                    value: s.device?.battery_pct.map { pct in
-                                        if let rec = s.device?.battery_recorded {
-                                            return "\(pct)% (\(rec))"
-                                        }
-                                        return "\(pct)%"
-                                    } ?? "–",
-                                    accent: (s.device?.battery_pct ?? 100) < 20 ? Obs.bad : Obs.ink)
-                            if let raw = s.device?.raw_events ?? s.device?.total_events {
-                                ObsStat(label: "eventos",
-                                        value: s.device?.decoded_events.map { "\(raw) raw · \($0) decoded" } ?? "\(raw)")
-                            }
-                            ObsStat(label: "sincronizado",
-                                    value: s.device.flatMap { d in d.synced.map { "\($0) \(d.synced_hm ?? "")" } } ?? "–")
-                        }
-                        BuildStamp(prefix: s.device?.days_of_data.map { span in
-                            let obs = s.device?.observed_days.map { " (\($0) observed)" } ?? ""
-                            return "\(String(format: "%.0f", span)) days\(obs) · \(s.device?.nights ?? s.nights.count) nights"
-                        })
-                    }
-                }
-                .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 24)
-            }
+    private func content(_ s: Summary) -> some View {
+        V4Home(summary: s, ring: ring, refreshing: isRefreshingSummary,
+            onSync: { showSync = true }, onProfile: { showProfile = true },
+            onHistory: { showAllDays = true }, onPulse: { showLivePulse = true },
+            onDebt: { showSleepDebt = true }, onVital: { vital = $0 },
+            onRefresh: {
+                guard !ring.busy, !showLivePulse else { return }
+                guard let key = Keychain.loadKey() else { showSync = true; return }
+                if let result = await ring.run(keyHex: key) { refreshAfterSync(result) }
+            }, onBedtimeSaved: refreshDerivedData)
     }
+
 }
 
 /// Which build is actually on this phone. A sideloaded app has no App Store version
@@ -1409,7 +1232,7 @@ enum PersonalDailyScores {
     }
 }
 
-private struct PersonalDailyScoresView: View {
+struct PersonalDailyScoresView: View {
     let summary: Summary
     let day: String
     @AppStorage("personal.goals.steps") private var stepsGoal = 8000
@@ -1441,7 +1264,7 @@ private struct PersonalDailyScoresView: View {
                                 Circle().stroke(Obs.trace.opacity(0.3), lineWidth: 6)
                                 if let value = score.value {
                                     Circle().trim(from: 0, to: CGFloat(value) / 100)
-                                        .stroke(Obs.good, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                                        .stroke(score.title == "Sueño" ? V4Tab.sleep.tint : score.title == "Actividad" ? V4Tab.sport.tint : V4Tab.health.tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                                         .rotationEffect(.degrees(-90))
                                 }
                                 VStack(spacing: 1) {
