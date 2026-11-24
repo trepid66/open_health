@@ -100,13 +100,13 @@ struct SleepScoreComponent: Codable, Identifiable {
     var id: String { key }
     var label: String {
         switch key {
-        case "duration": return "duration"
-        case "efficiency": return "efficiency"
-        case "onset_latency": return "time to fall asleep"
-        case "waso": return "awake during the night"
-        case "awakenings": return "awakenings"
-        case "architecture": return "stage balance"
-        case "physiology": return "heart & HRV"
+        case "duration": return "duración"
+        case "efficiency": return "eficiencia"
+        case "onset_latency": return "latencia de sueño"
+        case "waso": return "tiempo despierto"
+        case "awakenings": return "despertares"
+        case "architecture": return "equilibrio de fases"
+        case "physiology": return "pulso y HRV"
         default: return key
         }
     }
@@ -421,10 +421,10 @@ enum VitalKind: String, Identifiable, CaseIterable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .hrv: return "nightly hrv"
-        case .heartRate: return "heart rate"
-        case .temp: return "skin temp"
-        case .oxygen: return "blood o₂"
+        case .hrv: return "HRV nocturna"
+        case .heartRate: return "frecuencia cardíaca"
+        case .temp: return "temperatura cutánea"
+        case .oxygen: return "oxígeno en sangre"
         }
     }
     var unit: String {
@@ -437,10 +437,10 @@ enum VitalKind: String, Identifiable, CaseIterable {
     }
     var caption: String {
         switch self {
-        case .hrv: return "RMSSD from the longest sleep of each morning"
-        case .heartRate: return "Hour by hour from the beats the ring recorded, plus the nightly minimum resting rate"
-        case .temp: return "Nightly skin temperature"
-        case .oxygen: return "Nightly average blood oxygen"
+        case .hrv: return "RMSSD del descanso más largo de cada mañana"
+        case .heartRate: return "Pulso por horas y mínimo nocturno"
+        case .temp: return "Temperatura cutánea nocturna"
+        case .oxygen: return "Oxígeno medio nocturno"
         }
     }
     var decimals: Int {
