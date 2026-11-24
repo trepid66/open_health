@@ -152,51 +152,7 @@ struct ProfileSettingsView: View {
                     Text("Se guardan únicamente en este iPhone y se utilizan en los cálculos cardiovasculares y de actividad.")
                 }
 
-                Section {
-                    Button {
-                        importing = true; message = nil
-                        HealthProfileImporter.load { result in
-                            importing = false
-                            switch result {
-                            case .success(let health):
-                                if let v = health.sex { profile.sex = v }
-                                if let v = health.age, v > 0 { profile.age = v }
-                                if let v = health.heightCm { profile.heightCm = v }
-                                if let v = health.weightKg { profile.weightKg = v }
-                                message = "Datos disponibles importados de Apple Salud."
-                            case .failure(let error): message = error.localizedDescription
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            Label("Importar desde Apple Salud", systemImage: "heart.text.square")
-                            Spacer()
-                            if importing { ProgressView() }
-                        }
-                    }
-                    .disabled(importing)
-                    if let message { Text(message).font(.footnote).foregroundStyle(Obs.ink2) }
-                }
 
-                Section {
-                    Toggle("Exportar datos del anillo a Apple Salud", isOn: Binding(
-                        get: { health.enabled },
-                        set: { health.setEnabled($0, summary: SummaryCache.load()) }
-                    ))
-                    if !health.status.isEmpty {
-                        Text(health.status).font(.footnote).foregroundStyle(Obs.ink2)
-                    }
-                    if health.enabled {
-                        Button("Eliminar los datos de Open Oura de Salud") {
-                            health.removeExportedSamples()
-                        }
-                        .foregroundStyle(Obs.bad)
-                    }
-                } header: {
-                    Text("Apple Salud")
-                } footer: {
-                    Text("Exporta entrenamientos, fases de sueño, pulso, HRV, pulso en reposo, pasos, calorías activas y distancia. Los datos permanecen en el iPhone.")
-                }
             }
             .scrollContentBackground(.hidden)
             .background(Obs.canvas.ignoresSafeArea())
