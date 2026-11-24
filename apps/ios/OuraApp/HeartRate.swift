@@ -65,7 +65,7 @@ enum HourlyHR {
                        max: (row["max"] as? NSNumber)?.doubleValue ?? high,
                        count: (row["count"] as? NSNumber)?.intValue ?? 0)
         }
-        let latest = (root["Última medición"] as? [String: Any]).flatMap { l -> Reading? in
+        let latest = (root["latest"] as? [String: Any]).flatMap { l -> Reading? in
             guard let bpm = (l["bpm"] as? NSNumber)?.doubleValue,
                   let unix = (l["unix"] as? NSNumber)?.doubleValue else { return nil }
             return Reading(bpm: bpm, unix: unix)
@@ -381,12 +381,6 @@ struct PersonalLivePulseView: View {
                             Text("Lectura reciente experimental").font(.headline)
                             Text("\(estimate) ppm").font(Obs.mono(28, .medium))
                             Text("Estimación de una lectura nueva del anillo; no equivale a una señal continua de latidos. Calidad aún sin validar.").font(.footnote).foregroundStyle(Obs.muted)
-                        }.obsCard()
-                    }
-                    if !ring.liveDiagnostics.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Diagnóstico de la sesión").font(.headline)
-                            Text(ring.liveDiagnostics.joined(separator: "\n")).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
                         }.obsCard()
                     }
                     Text("Ponte el anillo, permanece quieto y mantén esta pantalla abierta. La medición dura hasta 60 segundos una vez conectado. Si no se reciben latidos válidos, no se muestra un valor inventado. Función experimental, no destinada a uso médico.")
