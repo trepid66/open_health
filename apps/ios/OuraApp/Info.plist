@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>es</string>
 	<key>CFBundleDisplayName</key>
 	<string>Open Oura</string>
 	<key>CFBundleExecutable</key>
@@ -29,9 +29,9 @@
 		<string>bluetooth-central</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Open Oura connects to your Oura ring over Bluetooth to read your health data on-device.</string>
+	<string>Open Oura conecta con tu anillo por Bluetooth para leer tus datos de salud en el iPhone.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Open Oura connects to your Oura ring over Bluetooth to read your health data on-device.</string>
+	<string>Open Oura conecta con tu anillo por Bluetooth para leer tus datos de salud en el iPhone.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Open Oura can read selected Apple Health data to compare it with your ring metrics on-device.</string>
 	<key>NSHealthUpdateUsageDescription</key>
