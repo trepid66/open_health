@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 // SIBLING CLIENT: the web dashboard (dashboard/web/app.js) renders the SAME summary
 // JSON — a user-facing change here usually belongs there too (docs/clients-web-and-ios.md).
 
-// The home's unified "today": last night's sleep and that day's activity as ONE unit,
+// The home's unified "hoy": last night's sleep and that day's activity as ONE unit,
 // each region tappable to open its own detail (sleep → SleepDetail, activity →
 // ActivityDetail). Mirrors the web dashboard's day card. Previous days live behind
 // "show all days" (AllDaysView → DayDetailView, which shows the same pairing).
@@ -23,7 +23,7 @@ struct TodayCard: View {
                 Button(action: onSleep) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            ObsTag("sleep", icon: "moon.fill")
+                            ObsTag("sueño", icon: "moon.fill")
                             Spacer()
                             Text(n.in_bed_h.map { String(format: "%.1fh", $0) } ?? "–")
                                 .font(Obs.mono(11)).foregroundStyle(Obs.ink2)
@@ -33,7 +33,7 @@ struct TodayCard: View {
                             .font(Obs.mono(12)).foregroundStyle(Obs.ink2)
                         if n.hasHypnogram { Hypnogram(stages: n.hypnogram!, height: 28) }
                         else if let e = n.efficiency {
-                            Text("efficiency \(Int(e))%").font(Obs.mono(12))
+                            Text("Eficiencia \(Int(e))%").font(Obs.mono(12))
                                 .foregroundStyle(e >= 85 ? Obs.good : (e < 75 ? Obs.bad : Obs.ink2))
                         }
                     }
@@ -48,10 +48,10 @@ struct TodayCard: View {
             Button(action: onActivity) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        ObsTag("activity", icon: "figure.walk")
+                        ObsTag("actividad", icon: "figure.walk")
                         Spacer()
                         if let st = s.activity_daily[day] {
-                            Text("\(Int(st.steps ?? 0)) steps").font(Obs.mono(11)).foregroundStyle(Obs.ink2)
+                            Text("\(Int(st.steps ?? 0)) pasos").font(Obs.mono(11)).foregroundStyle(Obs.ink2)
                             Text("· \(Int(st.active_kcal ?? 0)) kcal").font(Obs.mono(11)).foregroundStyle(Obs.ink2)
                         }
                         Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Obs.trace)
@@ -117,9 +117,9 @@ struct AllDaysView: View {
                     .padding(.horizontal, 24).padding(.bottom, 24)
                 }
             }
-            .navigationTitle("All days")
+            .navigationTitle("Historial")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Listo") { dismiss() } } }
         }
     }
 
@@ -141,7 +141,7 @@ struct AllDaysView: View {
                         .font(Obs.mono(12, .medium)).foregroundStyle(night == nil ? Obs.muted : Obs.ink)
                     if let st = stat, let steps = st.steps {
                         Text("·").foregroundStyle(Obs.trace)
-                        Text("\(Self.number.string(from: NSNumber(value: Int(steps))) ?? "0") steps")
+                        Text("\(Self.number.string(from: NSNumber(value: Int(steps))) ?? "0") pasos")
                             .font(Obs.mono(12)).foregroundStyle(Obs.ink2)
                     }
                     if let st = stat, let kcal = st.active_kcal, kcal > 0 {
@@ -237,29 +237,29 @@ struct SyncView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Obs.paper)
-            .navigationTitle("Your ring")
+            .navigationTitle("Tu anillo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("Listo") { dismiss() }
                         .foregroundStyle(Obs.ink)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { keyFocused = false }
+                    Button("Listo") { keyFocused = false }
                 }
             }
-            .alert("Reset local sync data?", isPresented: $confirmReset) {
-                Button("Cancel", role: .cancel) {}
-                Button("Reset local data", role: .destructive) {
+            .alert("¿Borrar los datos locales sincronizados?", isPresented: $confirmReset) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Borrar datos locales", role: .destructive) {
                     Task { if await ring.resetLocalDatabase() { onReset() } }
                 }
             } message: {
-                Text("This removes the synced data on this iPhone. Your next sync will download the history still available on your ring.")
+                Text("Se borrarán los datos sincronizados de este iPhone. La próxima sincronización descargará el historial que siga disponible en el anillo.")
             }
             .alert("Factory-reset \(ring.knownSerial ?? "the ring")?", isPresented: $confirmWipeRing) {
-                Button("Cancel", role: .cancel) {}
-                Button("Erase the ring", role: .destructive) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Borrar el anillo", role: .destructive) {
                     let serial = ring.knownSerial ?? ""
                     let current = key
                     Task {
@@ -270,7 +270,7 @@ struct SyncView: View {
                     }
                 }
             } message: {
-                Text("Erases the ring's pairing key, its Bluetooth bonds, any events it hasn't sent yet, and your stored body profile. Sync first if you want those events. This cannot be undone — but the ring stays yours: pair it again right here afterwards.")
+                Text("Borra la clave de vinculación, las conexiones Bluetooth, los eventos aún no enviados y el perfil guardado en el anillo. Sincroniza antes para no perder esos eventos. No se puede deshacer; después tendrás que vincular el anillo de nuevo.")
             }
         }
         .tint(Obs.ink)
@@ -288,16 +288,16 @@ struct SyncView: View {
     }
 
     private var header: some View {
-        Text("Pair your ring")
+        Text("Vincula tu anillo")
             .font(Obs.serif(28))
             .foregroundStyle(Obs.ink)
     }
 
     private var preparation: some View {
         VStack(alignment: .leading, spacing: 12) {
-            setupRow(icon: "bolt", title: "Put the ring on its charger, next to this iPhone", detail: nil)
-            setupRow(icon: "antenna.radiowaves.left.and.right", title: "Free the Bluetooth link",
-                     detail: "Turn Bluetooth off on other phones running the Oura app.")
+            setupRow(icon: "bolt", title: "Coloca el anillo en su cargador, junto al iPhone", detail: nil)
+            setupRow(icon: "antenna.radiowaves.left.and.right", title: "Libera la conexión Bluetooth",
+                     detail: "Desactiva el Bluetooth en otros teléfonos que estén usando Oura.")
         }
     }
 
@@ -323,20 +323,20 @@ struct SyncView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Group {
-                    if showKey { TextField("Paste your pairing key", text: $key) }
-                    else { SecureField("Paste your pairing key", text: $key) }
+                    if showKey { TextField("Pega tu clave de vinculación", text: $key) }
+                    else { SecureField("Pega tu clave de vinculación", text: $key) }
                 }
                 .font(.system(.subheadline, design: .monospaced))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .focused($keyFocused)
-                .accessibilityLabel("Pairing key")
+                .accessibilityLabel("Clave de vinculación")
                 .disabled(ring.busy)
                 Button { showKey.toggle() } label: {
                     Image(systemName: showKey ? "eye.slash" : "eye")
                         .frame(width: 44, height: 44)
                 }
-                .accessibilityLabel(showKey ? "Hide pairing key" : "Show pairing key")
+                .accessibilityLabel(showKey ? "Ocultar clave" : "Mostrar clave")
             }
             .foregroundStyle(Obs.ink)
             .padding(.leading, 14)
@@ -345,7 +345,7 @@ struct SyncView: View {
             .background(Obs.rule.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(keyFocused ? Obs.muted : Obs.rule))
             if !key.isEmpty && !validKey {
-                Text("Use all 32 characters: numbers 0–9 and letters A–F.")
+                Text("Introduce los 32 caracteres: números 0–9 y letras A–F.")
                     .font(.footnote)
                     .foregroundStyle(Obs.ink2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -361,13 +361,13 @@ struct SyncView: View {
                 keyFocused = false
                 Task { if let minted = await ring.pair() { key = minted } }
             } label: {
-                (Text("No key? ").foregroundStyle(Obs.ink2)
-                 + Text("Pair a factory-reset ring").foregroundStyle(Obs.ink).underline())
+                (Text("¿Sin clave? ").foregroundStyle(Obs.ink2)
+                 + Text("Vincular un anillo restablecido de fábrica").foregroundStyle(Obs.ink).underline())
                     .font(.footnote)
             }
             .buttonStyle(.plain)
             .disabled(ring.busy)
-            Text("Write the new key down: it cannot be read back from the ring.")
+            Text("Guarda la nueva clave: no se puede volver a leer del anillo.")
                 .font(.footnote)
                 .foregroundStyle(Obs.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -386,13 +386,13 @@ struct SyncView: View {
                         .foregroundStyle(ring.lastReport != nil ? Obs.good : Obs.ink2)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(ring.busy ? "Sync in progress" : (ring.connectionIssue ?? (ring.lastReport != nil ? "Your ring is up to date" : "Sync status")))
+                    Text(ring.busy ? "Sincronizando" : (ring.connectionIssue ?? (ring.lastReport != nil ? "Tu anillo está actualizado" : "Estado de sincronización")))
                         .font(.subheadline.weight(.semibold)).foregroundStyle(Obs.ink)
                     Text(ring.status)
                         .font(.subheadline).foregroundStyle(Obs.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                     if ring.busy {
-                        Text("Keep the app open. If the connection drops, sync resumes automatically.")
+                        Text("Mantén la app abierta. Si se pierde la conexión, la sincronización se reanuda automáticamente.")
                             .font(.footnote).foregroundStyle(Obs.ink2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -409,7 +409,7 @@ struct SyncView: View {
             if ring.connectionIssue == nil { syncStatus }
             if ring.busy {
                 Button { ring.pause() } label: {
-                    Label("Pause sync", systemImage: "pause")
+                    Label("Pausar sincronización", systemImage: "pause")
                         .font(.body.weight(.medium))
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .foregroundStyle(Obs.ink)
@@ -424,7 +424,7 @@ struct SyncView: View {
                     }
                 } label: {
                     HStack(spacing: 10) {
-                        Text("Connect & sync")
+                        Text("Conectar y sincronizar")
                         Image(systemName: "arrow.right")
                     }
                     .font(.body.weight(.semibold))
@@ -434,7 +434,7 @@ struct SyncView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!validKey)
-                Text("Your first sync may take a few minutes.")
+                Text("La primera sincronización puede tardar varios minutos.")
                     .font(.footnote).foregroundStyle(Obs.ink2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -446,14 +446,14 @@ struct SyncView: View {
     private var support: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Help & diagnostics")
+                Text("Ayuda y diagnóstico")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(Obs.ink)
                 Spacer()
                 Text(appVersion).font(Obs.mono(11)).foregroundStyle(Obs.muted)
             }
             VStack(spacing: 0) {
-                SupportRow(icon: "arrow.down.doc", title: "Export data",
-                           detail: ring.exportStatus ?? "One file with every synced event",
+                SupportRow(icon: "arrow.down.doc", title: "Exportar datos",
+                           detail: ring.exportStatus ?? "Un archivo con todos los eventos sincronizados",
                            disabled: ring.busy || ring.exportStatus != nil) {
                     Task { if let url = await ring.exportRawDatabase() { diagnosticFile = url } }
                 }
@@ -461,20 +461,20 @@ struct SyncView: View {
                 NavigationLink {
                     ResearchExportView()
                 } label: {
-                    SupportRowLabel(icon: "tablecells", title: "Research export",
-                                    detail: "Every heart beat and movement as CSV", trailing: "chevron.right")
+                    SupportRowLabel(icon: "tablecells", title: "Exportación de investigación",
+                                    detail: "Cada latido y movimiento en CSV", trailing: "chevron.right")
                 }
                 .buttonStyle(.plain)
                 SupportDivider()
-                SupportRow(icon: "arrow.up.doc", title: "Restore from a backup",
-                           detail: restoreNote ?? "Replaces what this iPhone holds",
+                SupportRow(icon: "arrow.up.doc", title: "Restaurar copia de seguridad",
+                           detail: restoreNote ?? "Sustituye los datos locales de este iPhone",
                            disabled: ring.busy) { showRestorePicker = true }
                 SupportDivider()
                 NavigationLink {
                     RawDataView()
                 } label: {
-                    SupportRowLabel(icon: "waveform.path.ecg", title: "Raw data & charts",
-                                    detail: "Every event the ring sent", trailing: "chevron.right")
+                    SupportRowLabel(icon: "waveform.path.ecg", title: "Datos brutos y gráficos",
+                                    detail: "Todos los eventos enviados por el anillo", trailing: "chevron.right")
                 }
                 .buttonStyle(.plain)
                 SupportDivider()
@@ -489,7 +489,7 @@ struct SyncView: View {
                                              }
                                          })
                 } label: {
-                    SupportRowLabel(icon: "doc.text.magnifyingglass", title: "Technical reports",
+                    SupportRowLabel(icon: "doc.text.magnifyingglass", title: "Informes técnicos",
                                     detail: technicalSummary, trailing: "chevron.right")
                 }
                 .buttonStyle(.plain)
@@ -497,14 +497,14 @@ struct SyncView: View {
             .background(Obs.rule.opacity(0.3), in: RoundedRectangle(cornerRadius: 16))
 
             VStack(spacing: 0) {
-                SupportRow(icon: "trash", title: "Reset local sync data",
-                           detail: "The next sync fetches it again",
+                SupportRow(icon: "trash", title: "Borrar datos locales",
+                           detail: "La próxima sincronización recupera los datos disponibles",
                            tint: Obs.alert, disabled: ring.busy) { confirmReset = true }
                 SupportDivider()
-                SupportRow(icon: "exclamationmark.triangle", title: "Factory-reset the ring",
+                SupportRow(icon: "exclamationmark.triangle", title: "Restablecer el anillo de fábrica",
                            detail: ring.knownSerial == nil
-                               ? "Available after the first sync"
-                               : "Wipes the ring. Pair it again afterwards",
+                               ? "Disponible tras la primera sincronización"
+                               : "Borra el anillo. Deberás vincularlo de nuevo",
                            tint: Obs.alert,
                            disabled: ring.busy || ring.knownSerial == nil || !validKey) { confirmWipeRing = true }
             }
@@ -599,14 +599,14 @@ private struct TechnicalReportsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 HStack(spacing: 10) {
                     Button { onShare() } label: {
-                        Label("Share report", systemImage: "square.and.arrow.up")
+                        Label("Compartir informe", systemImage: "square.and.arrow.up")
                             .font(.subheadline.weight(.medium))
                             .lineLimit(1).minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Obs.rule))
                     }
                     Button { onCheck() } label: {
-                        Label("Check data", systemImage: "externaldrive")
+                        Label("Comprobar datos", systemImage: "externaldrive")
                             .font(.subheadline.weight(.medium))
                             .lineLimit(1).minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, minHeight: 44)
@@ -623,7 +623,7 @@ private struct TechnicalReportsView: View {
                 }
                 section("Incidents · \(store.incidents.count)", copy: nil) {
                     if store.incidents.isEmpty {
-                        Text("No incidents recorded.").font(.caption).foregroundStyle(Obs.muted)
+                        Text("No hay incidencias registradas.").font(.caption).foregroundStyle(Obs.muted)
                     }
                     ForEach(store.incidents.prefix(8)) { item in
                         VStack(alignment: .leading, spacing: 6) {
@@ -678,7 +678,7 @@ private struct TechnicalReportsView: View {
                         .frame(maxHeight: 260)
                         .background(Obs.paper.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
                     } else {
-                        Text("Nothing logged yet.").font(.caption).foregroundStyle(Obs.muted)
+                        Text("Todavía no hay registros.").font(.caption).foregroundStyle(Obs.muted)
                     }
                 }
             }
@@ -687,7 +687,7 @@ private struct TechnicalReportsView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Obs.paper)
-        .navigationTitle("Technical reports")
+        .navigationTitle("Informes técnicos")
         .navigationBarTitleDisplayMode(.inline)
         .task { if clockReport == nil { clockReport = await Task.detached { ClockReport.text() }.value } }
     }
@@ -770,7 +770,7 @@ private struct SyncIndicatorButton: View {
             .frame(width: 31, height: 31)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(ring.busy ? "Ring sync in progress" : "Ring sync and diagnostics")
+        .accessibilityLabel(ring.busy ? "Sincronización en curso" : "Sincronización y diagnóstico")
         .accessibilityHint("Opens sync status, logs, and manual controls")
         .onAppear(perform: updateAnimation)
         .onChange(of: ring.busy) { _, _ in updateAnimation() }
@@ -801,12 +801,13 @@ struct RootView: View {
         if args.contains("-openSync") { showSync = true }
         if args.contains("-openAllDays") { showAllDays = true }
         if let index = args.firstIndex(of: "-openDay"), index + 1 < args.count {
-            report = ReportSel(day: args[index + 1], sleep: !args.contains("activity"))
+            report = ReportSel(day: args[index + 1], sleep: !args.contains("actividad"))
         }
     }
     @State private var showAllDays = false
     @State private var showSync = false
     @State private var showProfile = false
+    @State private var showLivePulse = false
     @State private var showSleepDebt = false
     @State private var vital: VitalKind?
     @State private var loadGeneration = 0
@@ -822,22 +823,22 @@ struct RootView: View {
         let a = abs((diff * 10).rounded() / 10)
         if diff < -0.05 { return "\(a) yr younger" }
         if diff > 0.05 { return "\(a) yr older" }
-        return "in line"
+        return "acorde a tu edad"
     }
     private func localDay(_ date: Date = Date()) -> String {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
     private func displayedDayLabel(_ day: String, now: Date = Date()) -> String {
-        if day == localDay(now) { return "today" }
+        if day == localDay(now) { return "hoy" }
         if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now),
-           day == localDay(yesterday) { return "yesterday" }
+           day == localDay(yesterday) { return "ayer" }
         return day
     }
     private func latestLabel(date: String?, time: String? = nil) -> String {
         let day = date.map { String($0.suffix(5)) }
         let stamp = [day, time].compactMap { $0 }.joined(separator: " · ")
-        return stamp.isEmpty ? "latest sync" : "latest · \(stamp)"
+        return stamp.isEmpty ? "última sincronización" : "última · \(stamp)"
     }
     var body: some View {
         ZStack {
@@ -847,7 +848,7 @@ struct RootView: View {
             } else {
                 VStack(spacing: 14) {
                     ProgressView().tint(Obs.ink)
-                    Text("Loading your data…").font(Obs.mono(12)).foregroundStyle(Obs.ink2)
+                    Text("Cargando tus datos…").font(Obs.mono(12)).foregroundStyle(Obs.ink2)
                 }
             }
         }
@@ -858,6 +859,7 @@ struct RootView: View {
             SyncView(ring: ring, onSynced: refreshAfterSync, onReset: resetAndReload)
         }
         .sheet(isPresented: $showProfile) { ProfileSettingsView(profile: s?.profile, onSaved: refreshDerivedData) }
+        .sheet(isPresented: $showLivePulse) { PersonalLivePulseView(ring: ring) }
         .sheet(isPresented: $showSleepDebt) { if let debt = s?.sleepDebt { SleepDebtDetail(debt: debt) } }
         .sheet(item: $vital) { kind in if let s { VitalTrendView(s: s, kind: kind) } }
         #if TORCH
@@ -911,7 +913,7 @@ struct RootView: View {
 
     private func requestAutomaticSync() {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
-        guard !automaticSyncRequested else { return }
+        guard !automaticSyncRequested, !showLivePulse, !ring.liveActive else { return }
         automaticSyncRequested = true
         Task {
             defer { automaticSyncRequested = false }
@@ -1047,7 +1049,7 @@ struct RootView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("Open Oura").font(Obs.serif(22)).foregroundStyle(Obs.ink)
-                        Text("beta").font(Obs.mono(9, .medium)).tracking(1.2).foregroundStyle(Obs.muted)
+                        Text("V3").font(Obs.mono(9, .medium)).tracking(1.2).foregroundStyle(Obs.muted)
                         Spacer()
                         Button { showProfile = true } label: {
                             Image(systemName: "person.crop.circle")
@@ -1056,12 +1058,21 @@ struct RootView: View {
                         SyncIndicatorButton(ring: ring) { showSync = true }
                     }
 
+                    Button { showLivePulse = true } label: {
+                        HStack {
+                            Image(systemName: "heart.fill").foregroundStyle(Obs.alert)
+                            Text("Pulso en directo").font(Obs.prose(15, .medium)).foregroundStyle(Obs.ink)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(Obs.muted)
+                        }.frame(maxWidth: .infinity)
+                    }.buttonStyle(.plain).obsCard()
+
                     if let err = s.error {
-                        ObsTag("no data"); Text(err).font(Obs.mono(13)).foregroundStyle(Obs.bad)
+                        ObsTag("sin datos"); Text(err).font(Obs.mono(13)).foregroundStyle(Obs.bad)
                     } else {
                         // digest headline
                         if let d = s.digest {
-                            Text(d).font(Obs.prose(16, .regular)).foregroundStyle(Obs.ink)
+                            Text(d == "Synced. Not enough history yet for trends." ? "Sincronizado. Aún no hay suficiente historial para ver tendencias." : d).font(Obs.prose(16, .regular)).foregroundStyle(Obs.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -1077,7 +1088,7 @@ struct RootView: View {
                                 if ring.busy || isRefreshingSummary {
                                     ProgressView().controlSize(.mini).scaleEffect(0.68).tint(Obs.ink)
                                     // one line next to the tag: short labels, no wrapping
-                                    Text((ring.busy ? "Syncing ring" : (modelProgress.label ?? "Analyzing saved data")).lowercased()).font(Obs.mono(9, .medium))
+                                    Text((ring.busy ? "Sincronizando el anillo" : (modelProgress.label ?? "Analizando datos guardados")).lowercased()).font(Obs.mono(9, .medium))
                                         .tracking(0.6).foregroundStyle(Obs.ink2)
                                         .lineLimit(1).minimumScaleFactor(0.8).truncationMode(.tail)
                                 }
@@ -1091,29 +1102,29 @@ struct RootView: View {
 
                         // vitals
                         ObsRule()
-                        ObsTag("vitals", icon: "waveform.path.ecg")
+                        ObsTag("signos vitales", icon: "waveform.path.ecg")
                         HStack(alignment: .top, spacing: 24) {
-                            VitalCell(tag: "nightly hrv", value: f(s.vitals.hrv.latest), unit: "ms",
+                            VitalCell(tag: "HRV nocturna", value: f(s.vitals.hrv.latest), unit: "ms",
                                       delta: s.vitals.hrv.delta_pct, series: s.vitals.hrv.series,
                                       baseline: s.vitals.hrv.baseline,
                                       action: { vital = .hrv })
-                            VitalCell(tag: "heart rate",
+                            VitalCell(tag: "frecuencia cardíaca",
                                       value: f(latestHR?.latest ?? s.vitals.rhr.latest), unit: "bpm",
                                       series: s.vitals.rhr.series,
                                       baseline: s.vitals.rhr.baseline,
                                       deltaGoodWhenPositive: false,
                                       detail: latestHR.map { latestLabel(date: $0.date, time: $0.hm) }
-                                          ?? "nightly minimum",
+                                          ?? "mínima nocturna",
                                       action: { vital = .heartRate })
                         }
                         HStack(alignment: .top, spacing: 24) {
-                            VitalCell(tag: "skin temp",
+                            VitalCell(tag: "temperatura cutánea",
                                       value: latestTemp?.skin_temp.map { String(format: "%.1f", $0) } ?? "–",
                                       unit: "°c",
                                       series: recentTemperatures,
                                       detail: latestTemp.map { latestLabel(date: s.wakeYmd($0)) },
                                       action: { vital = .temp })
-                            VitalCell(tag: "blood o₂", value: f(latestOxygen?.spo2_mean), unit: "%",
+                            VitalCell(tag: "oxígeno en sangre", value: f(latestOxygen?.spo2_mean), unit: "%",
                                       series: recentOxygen,
                                       detail: latestOxygen.map { latestLabel(date: s.wakeYmd($0)) },
                                       action: { vital = .oxygen })
@@ -1138,13 +1149,13 @@ struct RootView: View {
                             ObsTag("cardiovascular", icon: "heart.fill")
                             VStack(spacing: 12) {
                                 if let cv = s.cardio, let va = cv.vascular_age {
-                                    ObsStat(label: "vascular age", value: String(format: "%.1f yr", va))
-                                    if let ca = cv.chronological_age { ObsStat(label: "vs your age", value: relAge(va - ca)) }
-                                    if let pwv = cv.pwv_ms { ObsStat(label: "pulse-wave velocity", value: String(format: "%.2f m/s", pwv)) }
-                                    if let seg = cv.segments { ObsStat(label: "segments analysed", value: "\(seg)") }
+                                    ObsStat(label: "edad vascular", value: String(format: "%.1f yr", va))
+                                    if let ca = cv.chronological_age { ObsStat(label: "respecto a tu edad", value: relAge(va - ca)) }
+                                    if let pwv = cv.pwv_ms { ObsStat(label: "velocidad de onda de pulso", value: String(format: "%.2f m/s", pwv)) }
+                                    if let seg = cv.segments { ObsStat(label: "segmentos analizados", value: "\(seg)") }
                                 }
                                 if let vo = s.fitness?.vo2max {
-                                    ObsStat(label: "vo₂max estimate", value: String(format: "%.1f ml/kg/min", vo))
+                                    ObsStat(label: "VO₂ máx. estimado", value: String(format: "%.1f ml/kg/min", vo))
                                 }
                             }
                         }
@@ -1154,7 +1165,7 @@ struct RootView: View {
                             ObsRule()
                             Button { showAllDays = true } label: {
                                 HStack {
-                                    ObsTag("all days", icon: "calendar")
+                                    ObsTag("historial", icon: "calendar")
                                     Text("\(s.days.count)").font(Obs.mono(11)).foregroundStyle(Obs.muted)
                                     Spacer()
                                     Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Obs.trace)
@@ -1166,7 +1177,7 @@ struct RootView: View {
                         // be resolved unambiguously (missing anchor, accelerated counter, or
                         // multi-reboot stall)
                         if let warnings = s.clock?.warnings, !warnings.isEmpty {
-                            ObsTag("ring clock", icon: "clock.badge.exclamationmark")
+                            ObsTag("reloj del anillo", icon: "clock.badge.exclamationmark")
                             VStack(alignment: .leading, spacing: 6) {
                                 ForEach(warnings, id: \.self) { w in
                                     Text("• \(w)").font(Obs.mono(11)).foregroundStyle(Obs.bad)
@@ -1178,7 +1189,7 @@ struct RootView: View {
                         // on-device model failures (empty unless a torch model genuinely
                         // failed — a missing bundle or an inference error, not just no data)
                         if !s.modelErrors.isEmpty {
-                            ObsTag("on-device models", icon: "exclamationmark.triangle")
+                            ObsTag("modelos locales", icon: "exclamationmark.triangle")
                             VStack(alignment: .leading, spacing: 6) {
                                 ForEach(s.modelErrors, id: \.self) { e in
                                     Text("• \(e)").font(Obs.mono(11)).foregroundStyle(Obs.bad)
@@ -1189,11 +1200,11 @@ struct RootView: View {
 
                         // device & data health
                         ObsRule()
-                        ObsTag("device", icon: "cpu")
+                        ObsTag("dispositivo", icon: "cpu")
                         VStack(spacing: 10) {
-                            ObsStat(label: "serial", value: s.device?.serial ?? "–")
+                            ObsStat(label: "número de serie", value: s.device?.serial ?? "–")
                             ObsStat(label: "firmware", value: s.device?.firmware ?? "–")
-                            ObsStat(label: "battery",
+                            ObsStat(label: "batería",
                                     value: s.device?.battery_pct.map { pct in
                                         if let rec = s.device?.battery_recorded {
                                             return "\(pct)% (\(rec))"
@@ -1202,10 +1213,10 @@ struct RootView: View {
                                     } ?? "–",
                                     accent: (s.device?.battery_pct ?? 100) < 20 ? Obs.bad : Obs.ink)
                             if let raw = s.device?.raw_events ?? s.device?.total_events {
-                                ObsStat(label: "events",
+                                ObsStat(label: "eventos",
                                         value: s.device?.decoded_events.map { "\(raw) raw · \($0) decoded" } ?? "\(raw)")
                             }
-                            ObsStat(label: "synced",
+                            ObsStat(label: "sincronizado",
                                     value: s.device.flatMap { d in d.synced.map { "\($0) \(d.synced_hm ?? "")" } } ?? "–")
                         }
                         BuildStamp(prefix: s.device?.days_of_data.map { span in
