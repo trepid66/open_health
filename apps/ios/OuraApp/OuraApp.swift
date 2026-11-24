@@ -1049,7 +1049,7 @@ struct RootView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("Open Oura").font(Obs.serif(22)).foregroundStyle(Obs.ink)
-                        Text("V3").font(Obs.mono(9, .medium)).tracking(1.2).foregroundStyle(Obs.muted)
+                        Text("V3.1").font(Obs.mono(9, .medium)).tracking(1.2).foregroundStyle(Obs.muted)
                         Spacer()
                         Button { showProfile = true } label: {
                             Image(systemName: "person.crop.circle")
